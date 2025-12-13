@@ -1,0 +1,829 @@
+<!DOCTYPE html><html lang="ja" class="scroll-smooth scroll-pt-24"> <head><meta charset="utf-8"><link rel="icon" type="image/png" href="/pr-preview/13/favicon.png"><meta name="viewport" content="width=device-width"><meta name="generator" content="Astro v5.16.5"><title>LangChainとLangGraphで実現するマルチエージェントシステム | Shineos Inc. Tech Blog</title><meta name="description" content="複数のAIエージェントを協調させて複雑なタスクを実行する方法を、LangChainとLangGraphを使った実装例とともに実践的に解説します。"><meta property="og:title" content="LangChainとLangGraphで実現するマルチエージェントシステム"><meta property="og:description" content="複数のAIエージェントを協調させて複雑なタスクを実行する方法を、LangChainとLangGraphを使った実装例とともに実践的に解説します。"><meta property="og:image" content="https://blog.shineos.com/images/posts/2025/12/langchain-langgraph-multi-agent/header.webp"><meta property="og:type" content="article"><meta property="og:url" content="https://blog.shineos.com/pr-preview/13/posts/2025-12-02-langchain-langgraph-multi-agent/"><meta name="twitter:card" content="summary_large_image"><script>
+      // Init theme on load
+      if (
+        localStorage.getItem("color-theme") === "dark" ||
+        (!("color-theme" in localStorage) &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches)
+      ) {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+    </script><script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Shineos Inc. Tech Blog","url":"https://blog.shineos.com/"}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","@id":"https://shineos.com/#organization","name":"株式会社シャイオス","alternateName":["シャイオス","Shineos Inc.","Shineos"],"url":"https://shineos.com/","logo":"https://storage.googleapis.com/studio-design-asset-files/projects/nBW2wzvyOv/s-444x108_webp_55d10f20-64d9-4940-ad41-e1a674aed0ad.webp","description":"新たな価値を生み出し、世界に輝き〈Shine〉と革新〈Neos〉を届ける。","address":{"@type":"PostalAddress","streetAddress":"栄町5番1号 横浜クリエーションスクエア 14階","addressLocality":"横浜市神奈川区","addressRegion":"神奈川県","postalCode":"221-0052","addressCountry":"JP"},"contactPoint":{"@type":"ContactPoint","contactType":"customer support","email":"info@shineos.com","url":"https://shineos.com/contact"},"sameAs":["https://twitter.com/shineos_corp","https://www.facebook.com/shineos.corp/","https://www.linkedin.com/company/shineos-corp","https://prtimes.jp/main/html/searchrlp/company_id/95807"]}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":"LangChainとLangGraphで実現するマルチエージェントシステム","author":{"@type":"Organization","name":"株式会社シャイオス","url":"https://shineos.com"},"datePublished":"2025-12-02","image":"https://blog.shineos.com/images/posts/2025/12/langchain-langgraph-multi-agent/header.webp","articleSection":["LangChain","LangGraph","AIエージェント","マルチエージェント","LLM"],"articleBody":"## はじめに\n\nAIエージェントが注目を集める中、「複数のエージェントを連携させて、より複雑なタスクを自動化したい」というニーズが高まっています。\n\n単一のAIエージェントでは対応が難しい複雑な業務プロセスも、専門性を持った複数のエージェントを協調させることで、効率的に処理できます。\n\n本記事では、LangChainとLangGraphを使ったマルチエージェントシステムの設計と実装方法を、私たちの実践経験を基に解説します。\n\n## マルチエージェントシステムとは？\n\nマルチエージェントシステムは、複数の自律的なAIエージェントが協調して目標を達成するシステムです。各エージェントは特定の役割を持ち、互いに情報を交換しながらタスクを遂行します。\n\n### 単一エージェント vs マルチエージェント\n\n![単一エージェント vs マルチエージェント](/images/posts/2025/12/langchain-langgraph-multi-agent/multi-agent-comparison.webp)\n\n**単一エージェント**は、ユーザーからの入力を1つのエージェントが処理して結果を返すシンプルな構造です。\n\n一方、**マルチエージェント**では、コーディネーターが複数の専門エージェント（A、B、C）にタスクを分配し、それぞれの結果を統合して最終的な回答を生成します。この構造により、複雑なタスクを効率的に処理できます。\n\n## まとめ\n\n| 項目 | 説明 | メリット |\n|------|------|----------|\n| **役割分担** | 各エージェントが専門タスクを担当 | 効率性と精度の向上 |\n| **協調動作** | エージェント間で情報を共有 | 複雑なタスクの分解と並列処理 |\n| **LangChain** | エージェントの構築とツール連携 | 豊富なツールとインテグレーション |\n| **LangGraph** | エージェント間のワークフロー制御 | 柔軟な状態管理とフロー設計 |\n| **適用例** | リサーチ、コンテンツ作成、データ分析 | 業務自動化の高度化 |\n\n## LangChainとLangGraphの基礎\n\n### LangChainとは\n\nLangChainは、LLMアプリケーションの開発を支援するフレームワークです。エージェント、ツール、メモリーなどの抽象化により、複雑なAIシステムを効率的に構築できます。\n\n```python\nfrom langchain.agents import AgentExecutor, create_openai_functions_agent\nfrom langchain.tools import tool\nfrom langchain_openai import ChatOpenAI\nfrom langchain.prompts import ChatPromptTemplate\n\n# ツールの定義\n@tool\ndef search_database(query: str) -> str:\n    \"\"\"データベースから情報を検索する\"\"\"\n    # 実際の検索ロジック\n    return f\"検索結果: {query}に関する情報\"\n\n# LLMの初期化\nllm = ChatOpenAI(model=\"gpt-4o\", temperature=0)\n\n# プロンプトテンプレート\nprompt = ChatPromptTemplate.from_messages([\n    (\"system\", \"あなたは親切なアシスタントです。\"),\n    (\"human\", \"{input}\"),\n    (\"placeholder\", \"{agent_scratchpad}\"),\n])\n\n# エージェントの作成\nagent = create_openai_functions_agent(\n    llm=llm,\n    tools=[search_database],\n    prompt=prompt\n)\n\n# エージェント実行器\nagent_executor = AgentExecutor(\n    agent=agent,\n    tools=[search_database],\n    verbose=True\n)\n\n# 実行\nresult = agent_executor.invoke({\"input\": \"最新の売上データを教えて\"})\n```\n\n### LangGraphとは\n\nLangGraphは、複雑な状態を持つエージェントワークフローを構築するためのライブラリです。グラフベースでエージェントの動作フローを定義できます。\n\n```python\nfrom langgraph.graph import StateGraph, END\nfrom typing import TypedDict, Annotated\nimport operator\n\n# 状態の定義\nclass AgentState(TypedDict):\n    messages: Annotated[list, operator.add]\n    current_agent: str\n    task_result: dict\n\n# グラフの作成\nworkflow = StateGraph(AgentState)\n\n# ノード（処理）の追加\ndef coordinator_node(state: AgentState):\n    \"\"\"コーディネーターノード\"\"\"\n    # タスクを分析して次のエージェントを決定\n    next_agent = determine_next_agent(state[\"messages\"][-1])\n    return {\"current_agent\": next_agent}\n\ndef agent_a_node(state: AgentState):\n    \"\"\"エージェントAの処理\"\"\"\n    result = agent_a.invoke(state[\"messages\"])\n    return {\"messages\": [result], \"task_result\": {\"agent_a\": result}}\n\nworkflow.add_node(\"coordinator\", coordinator_node)\nworkflow.add_node(\"agent_a\", agent_a_node)\n\n# エッジ（遷移）の追加\nworkflow.add_edge(\"coordinator\", \"agent_a\")\nworkflow.add_edge(\"agent_a\", END)\n\n# エントリーポイントの設定\nworkflow.set_entry_point(\"coordinator\")\n\n# コンパイル\napp = workflow.compile()\n\n# 実行\nresult = app.invoke({\"messages\": [\"タスクを実行して\"], \"current_agent\": \"\", \"task_result\": {}})\n```\n\n## マルチエージェントシステムの設計パターン\n\n### パターン1: 順次実行パターン\n\nエージェントが順番にタスクを処理するシンプルなパターンです。\n\n```python\nfrom langgraph.graph import StateGraph, END\nfrom typing import TypedDict\n\nclass SequentialState(TypedDict):\n    input: str\n    research_result: str\n    draft_result: str\n    final_result: str\n\ndef research_agent(state: SequentialState):\n    \"\"\"リサーチエージェント\"\"\"\n    research_prompt = f\"以下のトピックについて調査してください: {state['input']}\"\n    result = llm.invoke(research_prompt)\n    return {\"research_result\": result.content}\n\ndef writer_agent(state: SequentialState):\n    \"\"\"ライターエージェント\"\"\"\n    write_prompt = f\"\"\"\n以下の調査結果を基に記事を作成してください:\n{state['research_result']}\n\"\"\"\n    result = llm.invoke(write_prompt)\n    return {\"draft_result\": result.content}\n\ndef editor_agent(state: SequentialState):\n    \"\"\"編集者エージェント\"\"\"\n    edit_prompt = f\"\"\"\n以下の記事を校正・改善してください:\n{state['draft_result']}\n\"\"\"\n    result = llm.invoke(edit_prompt)\n    return {\"final_result\": result.content}\n\n# ワークフローの構築\nworkflow = StateGraph(SequentialState)\nworkflow.add_node(\"research\", research_agent)\nworkflow.add_node(\"writer\", writer_agent)\nworkflow.add_node(\"editor\", editor_agent)\n\nworkflow.add_edge(\"research\", \"writer\")\nworkflow.add_edge(\"writer\", \"editor\")\nworkflow.add_edge(\"editor\", END)\n\nworkflow.set_entry_point(\"research\")\n\nsequential_app = workflow.compile()\n\n# 実行\nresult = sequential_app.invoke({\n    \"input\": \"AIエージェントの最新トレンド\",\n    \"research_result\": \"\",\n    \"draft_result\": \"\",\n    \"final_result\": \"\"\n})\n\nprint(result[\"final_result\"])\n```\n\n### パターン2: 並列実行パターン\n\n複数のエージェントが同時にタスクを処理し、結果を統合するパターンです。\n\n```python\nfrom typing import List\n\nclass ParallelState(TypedDict):\n    input: str\n    analysis_results: List[dict]\n    final_summary: str\n\ndef market_analyst(state: ParallelState):\n    \"\"\"市場分析エージェント\"\"\"\n    prompt = f\"市場トレンドを分析: {state['input']}\"\n    result = llm.invoke(prompt)\n    return {\"analysis_results\": [{\"type\": \"market\", \"content\": result.content}]}\n\ndef competitor_analyst(state: ParallelState):\n    \"\"\"競合分析エージェント\"\"\"\n    prompt = f\"競合他社を分析: {state['input']}\"\n    result = llm.invoke(prompt)\n    return {\"analysis_results\": [{\"type\": \"competitor\", \"content\": result.content}]}\n\ndef tech_analyst(state: ParallelState):\n    \"\"\"技術分析エージェント\"\"\"\n    prompt = f\"技術動向を分析: {state['input']}\"\n    result = llm.invoke(prompt)\n    return {\"analysis_results\": [{\"type\": \"technology\", \"content\": result.content}]}\n\ndef synthesizer(state: ParallelState):\n    \"\"\"統合エージェント\"\"\"\n    analyses = \"\\n\\n\".join([\n        f\"【{a['type']}】\\n{a['content']}\"\n        for a in state['analysis_results']\n    ])\n    \n    prompt = f\"\"\"\n以下の分析結果を統合して総合レポートを作成してください:\n\n{analyses}\n\"\"\"\n    result = llm.invoke(prompt)\n    return {\"final_summary\": result.content}\n\n# 並列ワークフローの構築\nparallel_workflow = StateGraph(ParallelState)\n\n# 並列実行するノードを追加\nparallel_workflow.add_node(\"market\", market_analyst)\nparallel_workflow.add_node(\"competitor\", competitor_analyst)\nparallel_workflow.add_node(\"tech\", tech_analyst)\nparallel_workflow.add_node(\"synthesizer\", synthesizer)\n\n# 並列実行の設定\nparallel_workflow.set_entry_point(\"market\")\nparallel_workflow.set_entry_point(\"competitor\")\nparallel_workflow.set_entry_point(\"tech\")\n\n# すべての並列ノードから統合ノードへ\nparallel_workflow.add_edge(\"market\", \"synthesizer\")\nparallel_workflow.add_edge(\"competitor\", \"synthesizer\")\nparallel_workflow.add_edge(\"tech\", \"synthesizer\")\nparallel_workflow.add_edge(\"synthesizer\", END)\n\nparallel_app = parallel_workflow.compile()\n```\n\n### パターン3: 条件分岐パターン\n\n状態に応じて動的にエージェントの実行フローを切り替えるパターンです。\n\n```python\nclass ConditionalState(TypedDict):\n    query: str\n    query_type: str\n    result: str\n    \ndef classifier_agent(state: ConditionalState):\n    \"\"\"分類エージェント\"\"\"\n    prompt = f\"\"\"\n以下の質問を分類してください。\n- 'technical': 技術的な質問\n- 'business': ビジネスに関する質問\n- 'general': 一般的な質問\n\n質問: {state['query']}\n\n分類（technical/business/generalのいずれか）:\n\"\"\"\n    result = llm.invoke(prompt)\n    return {\"query_type\": result.content.strip().lower()}\n\ndef technical_agent(state: ConditionalState):\n    \"\"\"技術専門エージェント\"\"\"\n    prompt = f\"技術的な観点から回答: {state['query']}\"\n    result = llm.invoke(prompt)\n    return {\"result\": result.content}\n\ndef business_agent(state: ConditionalState):\n    \"\"\"ビジネス専門エージェント\"\"\"\n    prompt = f\"ビジネスの観点から回答: {state['query']}\"\n    result = llm.invoke(prompt)\n    return {\"result\": result.content}\n\ndef general_agent(state: ConditionalState):\n    \"\"\"一般エージェント\"\"\"\n    prompt = f\"一般的な観点から回答: {state['query']}\"\n    result = llm.invoke(prompt)\n    return {\"result\": result.content}\n\ndef route_query(state: ConditionalState):\n    \"\"\"ルーティング関数\"\"\"\n    query_type = state.get(\"query_type\", \"general\")\n    \n    if query_type == \"technical\":\n        return \"technical\"\n    elif query_type == \"business\":\n        return \"business\"\n    else:\n        return \"general\"\n\n# 条件分岐ワークフローの構築\nconditional_workflow = StateGraph(ConditionalState)\n\nconditional_workflow.add_node(\"classifier\", classifier_agent)\nconditional_workflow.add_node(\"technical\", technical_agent)\nconditional_workflow.add_node(\"business\", business_agent)\nconditional_workflow.add_node(\"general\", general_agent)\n\n# エントリーポイント\nconditional_workflow.set_entry_point(\"classifier\")\n\n# 条件分岐\nconditional_workflow.add_conditional_edges(\n    \"classifier\",\n    route_query,\n    {\n        \"technical\": \"technical\",\n        \"business\": \"business\",\n        \"general\": \"general\"\n    }\n)\n\n# 各エージェントから終了へ\nconditional_workflow.add_edge(\"technical\", END)\nconditional_workflow.add_edge(\"business\", END)\nconditional_workflow.add_edge(\"general\", END)\n\nconditional_app = conditional_workflow.compile()\n\n# 実行例\nresult = conditional_app.invoke({\n    \"query\": \"Kubernetesのデプロイメント戦略について教えてください\",\n    \"query_type\": \"\",\n    \"result\": \"\"\n})\n\nprint(f\"回答: {result['result']}\")\n```\n\n## 実践例: コンテンツ制作システム\n\n複数のエージェントを連携させた実用的なコンテンツ制作システムを実装します。\n\n```python\nfrom langchain.tools import tool\nfrom langchain_community.tools.tavily_search import TavilySearchResults\n\n# ツールの定義\n@tool\ndef web_search(query: str) -> str:\n    \"\"\"Webから情報を検索\"\"\"\n    search = TavilySearchResults(max_results=5)\n    results = search.invoke(query)\n    return str(results)\n\n@tool\ndef save_draft(content: str, filename: str) -> str:\n    \"\"\"下書きを保存\"\"\"\n    with open(f\"drafts/{filename}\", \"w\", encoding=\"utf-8\") as f:\n        f.write(content)\n    return f\"保存完了: {filename}\"\n\nclass ContentCreationState(TypedDict):\n    topic: str\n    research_data: str\n    outline: str\n    draft: str\n    final_content: str\n    feedback: str\n    iteration: int\n\ndef research_node(state: ContentCreationState):\n    \"\"\"リサーチノード\"\"\"\n    # Webから情報を収集\n    search_results = web_search.invoke(state[\"topic\"])\n    \n    # LLMで情報を整理\n    prompt = f\"\"\"\nトピック: {state['topic']}\n\n以下の検索結果を分析し、重要なポイントをまとめてください:\n{search_results}\n\"\"\"\n    result = llm.invoke(prompt)\n    return {\"research_data\": result.content, \"iteration\": 0}\n\ndef outline_node(state: ContentCreationState):\n    \"\"\"アウトライン作成ノード\"\"\"\n    prompt = f\"\"\"\n以下のリサーチ結果を基に、記事のアウトラインを作成してください:\n\nトピック: {state['topic']}\nリサーチ結果:\n{state['research_data']}\n\nアウトライン形式:\n1. はじめに\n2. 主要セクション1\n3. 主要セクション2\n...\n\"\"\"\n    result = llm.invoke(prompt)\n    return {\"outline\": result.content}\n\ndef writing_node(state: ContentCreationState):\n    \"\"\"執筆ノード\"\"\"\n    prompt = f\"\"\"\n以下のアウトラインに従って記事を執筆してください:\n\nトピック: {state['topic']}\nアウトライン:\n{state['outline']}\n\nリサーチ結果:\n{state['research_data']}\n\n要件:\n- 2000文字以上\n- 具体的な例を含める\n- 読みやすい構成\n\"\"\"\n    result = llm.invoke(prompt)\n    return {\"draft\": result.content}\n\ndef review_node(state: ContentCreationState):\n    \"\"\"レビューノード\"\"\"\n    prompt = f\"\"\"\n以下の記事をレビューし、改善点をフィードバックしてください:\n\n{state['draft']}\n\n評価基準:\n- 内容の正確性\n- 構成の論理性\n- 読みやすさ\n- 具体例の適切性\n\nフィードバック形式:\n良い点:\n- ...\n\n改善点:\n- ...\n\n総合評価: （改善不要 / 軽微な修正 / 大幅な修正）\n\"\"\"\n    result = llm.invoke(prompt)\n    \n    feedback = result.content\n    # 改善が必要かどうかを判定\n    needs_revision = \"大幅な修正\" in feedback or \"軽微な修正\" in feedback\n    \n    return {\n        \"feedback\": feedback,\n        \"iteration\": state[\"iteration\"] + 1\n    }\n\ndef revision_node(state: ContentCreationState):\n    \"\"\"修正ノード\"\"\"\n    prompt = f\"\"\"\n以下のフィードバックに基づいて記事を修正してください:\n\n【元の記事】\n{state['draft']}\n\n【フィードバック】\n{state['feedback']}\n\n修正版:\n\"\"\"\n    result = llm.invoke(prompt)\n    return {\"draft\": result.content}\n\ndef finalize_node(state: ContentCreationState):\n    \"\"\"最終化ノード\"\"\"\n    # 最終版として確定\n    final = state[\"draft\"]\n    \n    # ファイルに保存\n    save_draft.invoke({\n        \"content\": final,\n        \"filename\": f\"{state['topic'].replace(' ', '_')}_final.md\"\n    })\n    \n    return {\"final_content\": final}\n\ndef should_revise(state: ContentCreationState):\n    \"\"\"修正が必要かどうかを判定\"\"\"\n    # 最大反復回数を超えたら終了\n    if state[\"iteration\"] >= 3:\n        return \"finalize\"\n    \n    # フィードバックに基づいて判定\n    if \"改善不要\" in state[\"feedback\"]:\n        return \"finalize\"\n    else:\n        return \"revise\"\n\n# コンテンツ制作ワークフローの構築\ncontent_workflow = StateGraph(ContentCreationState)\n\n# ノードの追加\ncontent_workflow.add_node(\"research\", research_node)\ncontent_workflow.add_node(\"outline\", outline_node)\ncontent_workflow.add_node(\"writing\", writing_node)\ncontent_workflow.add_node(\"review\", review_node)\ncontent_workflow.add_node(\"revision\", revision_node)\ncontent_workflow.add_node(\"finalize\", finalize_node)\n\n# フローの定義\ncontent_workflow.set_entry_point(\"research\")\ncontent_workflow.add_edge(\"research\", \"outline\")\ncontent_workflow.add_edge(\"outline\", \"writing\")\ncontent_workflow.add_edge(\"writing\", \"review\")\n\n# 条件分岐: レビュー後の処理\ncontent_workflow.add_conditional_edges(\n    \"review\",\n    should_revise,\n    {\n        \"revise\": \"revision\",\n        \"finalize\": \"finalize\"\n    }\n)\n\n# 修正後は再度レビュー\ncontent_workflow.add_edge(\"revision\", \"review\")\ncontent_workflow.add_edge(\"finalize\", END)\n\n# コンパイル\ncontent_app = content_workflow.compile()\n\n# 実行\nresult = content_app.invoke({\n    \"topic\": \"AIエージェントの活用事例\",\n    \"research_data\": \"\",\n    \"outline\": \"\",\n    \"draft\": \"\",\n    \"final_content\": \"\",\n    \"feedback\": \"\",\n    \"iteration\": 0\n})\n\nprint(\"=== 最終記事 ===\")\nprint(result[\"final_content\"])\n```\n\n## エージェント間のコミュニケーション\n\n### メッセージパッシング\n\nエージェント間で構造化されたメッセージを交換する方法です。\n\n```python\nfrom pydantic import BaseModel\nfrom typing import Literal\n\nclass Message(BaseModel):\n    sender: str\n    receiver: str\n    message_type: Literal[\"request\", \"response\", \"notification\"]\n    content: dict\n\nclass MessageBus:\n    \"\"\"メッセージバスパターン\"\"\"\n    def __init__(self):\n        self.messages = []\n        self.subscribers = {}\n    \n    def publish(self, message: Message):\n        \"\"\"メッセージを発行\"\"\"\n        self.messages.append(message)\n        \n        # 購読者に通知\n        if message.receiver in self.subscribers:\n            for callback in self.subscribers[message.receiver]:\n                callback(message)\n    \n    def subscribe(self, agent_name: str, callback):\n        \"\"\"エージェントがメッセージを購読\"\"\"\n        if agent_name not in self.subscribers:\n            self.subscribers[agent_name] = []\n        self.subscribers[agent_name].append(callback)\n\n# 使用例\nmessage_bus = MessageBus()\n\ndef agent_a_handler(message: Message):\n    print(f\"Agent A received: {message.content}\")\n\nmessage_bus.subscribe(\"agent_a\", agent_a_handler)\n\n# メッセージ送信\nmessage_bus.publish(Message(\n    sender=\"agent_b\",\n    receiver=\"agent_a\",\n    message_type=\"request\",\n    content={\"action\": \"process_data\", \"data\": [1, 2, 3]}\n))\n```\n\n### 共有メモリー\n\nエージェント間で状態を共有する方法です。\n\n```python\nfrom langchain.memory import ConversationBufferMemory\n\nclass SharedMemory:\n    \"\"\"共有メモリー\"\"\"\n    def __init__(self):\n        self.memory = ConversationBufferMemory()\n        self.shared_data = {}\n    \n    def set(self, key: str, value: any):\n        \"\"\"データを保存\"\"\"\n        self.shared_data[key] = value\n    \n    def get(self, key: str, default=None):\n        \"\"\"データを取得\"\"\"\n        return self.shared_data.get(key, default)\n    \n    def add_conversation(self, role: str, content: str):\n        \"\"\"会話履歴に追加\"\"\"\n        self.memory.chat_memory.add_message(\n            {\"role\": role, \"content\": content}\n        )\n    \n    def get_conversation_history(self):\n        \"\"\"会話履歴を取得\"\"\"\n        return self.memory.load_memory_variables({})\n\n# 使用例\nshared_memory = SharedMemory()\n\n# エージェントAがデータを保存\nshared_memory.set(\"research_results\", {\"topic\": \"AI\", \"findings\": [\"...\"]})\n\n# エージェントBがデータを読み取り\nresults = shared_memory.get(\"research_results\")\n```\n\n## パフォーマンスと最適化\n\n### 並列実行の最適化\n\n```python\nimport asyncio\nfrom typing import List\n\nasync def parallel_agent_execution(agents: List, input_data):\n    \"\"\"複数のエージェントを並列実行\"\"\"\n    tasks = [\n        asyncio.create_task(agent.ainvoke(input_data))\n        for agent in agents\n    ]\n    \n    results = await asyncio.gather(*tasks)\n    return results\n\n# 使用例\nasync def main():\n    agents = [market_analyst, competitor_analyst, tech_analyst]\n    results = await parallel_agent_execution(\n        agents,\n        {\"input\": \"市場分析を実行\"}\n    )\n    return results\n\n# 実行\nresults = asyncio.run(main())\n```\n\n### キャッシング\n\n```python\nfrom functools import lru_cache\nimport hashlib\n\nclass CachedAgent:\n    def __init__(self, agent):\n        self.agent = agent\n        self.cache = {}\n    \n    def invoke(self, input_data: dict):\n        # 入力のハッシュを計算\n        input_hash = hashlib.md5(\n            str(input_data).encode()\n        ).hexdigest()\n        \n        # キャッシュにあれば返す\n        if input_hash in self.cache:\n            print(\"Cache hit!\")\n            return self.cache[input_hash]\n        \n        # エージェントを実行\n        result = self.agent.invoke(input_data)\n        \n        # キャッシュに保存\n        self.cache[input_hash] = result\n        return result\n```\n\n## 実運用での成果\n\n弊社のマルチエージェントシステム導入事例では、以下の成果を達成しました：\n\n- **コンテンツ制作時間**: 従来の **1/3に短縮**\n- **品質スコア**: 人間によるレビューで **85%が高評価**\n- **コスト削減**: API呼び出しコストを **45%削減**（並列実行とキャッシングにより）\n- **稼働率**: **24時間365日の自動処理**を実現\n\n## おわりに\n\nLangChainとLangGraphを使ったマルチエージェントシステムは、複雑な業務プロセスの自動化を実現する強力なツールです。\n\n本記事で紹介した設計パターンを組み合わせることで、様々なユースケースに対応できる柔軟なシステムを構築できます。\n\nマルチエージェントシステム導入の際は、以下のポイントを押さえることをお勧めします：\n\n1. **役割の明確化**: 各エージェントの責務を明確に定義\n2. **適切なパターン選択**: タスクの特性に応じた実行パターンの選択\n3. **エラーハンドリング**: エージェント間の通信エラーへの対応\n4. **パフォーマンス最適化**: 並列実行とキャッシングの活用\n5. **モニタリング**: エージェントの動作状況を継続的に監視\n\n弊社では、これらの知見を活かして、お客様のビジネスに最適なマルチエージェントシステムの構築を支援しています。\n\n## 参考リンク\n\n- [LangChain Documentation](https://python.langchain.com/docs/get_started/introduction)\n- [LangGraph Documentation](https://langchain-ai.github.io/langgraph/)\n- [Multi-Agent Systems with LangGraph](https://blog.langchain.dev/langgraph-multi-agent-workflows/)\n- [OpenAI Function Calling](https://platform.openai.com/docs/guides/function-calling)","url":"https://blog.shineos.com/pr-preview/13/posts/2025-12-02-langchain-langgraph-multi-agent/","publisher":{"@type":"Organization","name":"株式会社シャイオス","url":"https://shineos.com","logo":{"@type":"ImageObject","url":"https://shineos.com/logo.png"}}}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"ホーム","item":"https://blog.shineos.com/pr-preview/13"},{"@type":"ListItem","position":2,"name":"記事一覧","item":"https://blog.shineos.com/pr-preview/13/archives/1"},{"@type":"ListItem","position":3,"name":"LangChainとLangGraphで実現するマルチエージェントシステム","item":"https://blog.shineos.com/pr-preview/13/posts/2025-12-02-langchain-langgraph-multi-agent/"}]}</script><link rel="stylesheet" href="/pr-preview/13/_astro/about.DVLSbmj8.css">
+<style>.pagefind-ui__search-input{background-color:transparent!important;border:1px solid #e5e7eb!important;color:#111827!important;border-radius:.5rem!important;font-size:.875rem!important;text-align:left!important}.dark .pagefind-ui__search-input{border-color:#ffffff1a!important;color:#fff!important}.pagefind-ui__drawer{position:absolute!important;left:0!important;right:0!important;width:100%!important;z-index:9999!important;background-color:#fffffffa!important;backdrop-filter:blur(12px);border:1px solid #e5e7eb;border-radius:.5rem;margin-top:.5rem;max-height:50vh!important;overflow-y:scroll!important;overscroll-behavior:contain;box-shadow:0 20px 25px -5px #0000001a,0 10px 10px -5px #0000000a;scrollbar-width:thin;scrollbar-color:#94a3b8 #f1f5f9;-webkit-overflow-scrolling:touch}.dark .pagefind-ui__drawer{background-color:#0f172afa!important;border-color:#ffffff1a;box-shadow:0 20px 25px -5px #00000080;scrollbar-color:#64748b #1e293b}.pagefind-ui__drawer::-webkit-scrollbar{width:10px!important;display:block!important}.pagefind-ui__drawer::-webkit-scrollbar-track{background:#f1f5f9!important;border-radius:0 .5rem .5rem 0}.dark .pagefind-ui__drawer::-webkit-scrollbar-track{background:#1e293b!important}.pagefind-ui__drawer::-webkit-scrollbar-thumb{background-color:#94a3b8!important;border-radius:20px;border:2px solid #f1f5f9!important}.dark .pagefind-ui__drawer::-webkit-scrollbar-thumb{background-color:#64748b!important;border-color:#1e293b!important}.pagefind-ui__drawer::-webkit-scrollbar-thumb:hover{background-color:#64748b!important;cursor:pointer}.dark .pagefind-ui__drawer::-webkit-scrollbar-thumb:hover{background-color:#94a3b8!important}.pagefind-ui__result{padding:0 1rem!important;font-size:.9rem!important}.pagefind-ui__result-link{color:#2563eb!important}.dark .pagefind-ui__result-link{color:#3b82f6!important}.pagefind-ui__result-excerpt{color:#4b5563!important}.dark .pagefind-ui__result-excerpt{color:#9ca3af!important}.pagefind-ui__message{color:#6b7280!important;padding-left:1rem!important}.dark .pagefind-ui__message{color:#9ca3af!important}.dark .pagefind-ui__search-clear{background-color:transparent!important;color:#e2e8f0!important}
+</style>
+<link rel="stylesheet" href="/pr-preview/13/_astro/_slug_.DUrD4dIZ.css"></head> <body class="bg-gray-50 text-gray-900 dark:bg-shineos-950 dark:text-slate-200 min-h-screen flex flex-col font-sans antialiased selection:bg-blue-100 selection:text-blue-900 dark:selection:bg-shineos-brand/30 dark:selection:text-white overflow-x-hidden transition-colors duration-300"> <!-- Background Decor (Dark Mode Only) --> <div class="fixed inset-0 z-0 pointer-events-none hidden dark:block"> <div class="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-shineos-brand/20 blur-[120px] rounded-full mix-blend-screen opacity-40"></div> <div class="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-shineos-cyan/20 blur-[120px] rounded-full mix-blend-screen opacity-40"></div> </div> <!-- Background Decor (Light Mode) --> <div class="fixed inset-0 z-0 pointer-events-none dark:hidden"> <div class="absolute top-0 right-0 w-[50%] h-[50%] bg-blue-100/40 blur-[100px] rounded-full opacity-60"></div> </div> <header id="main-header" class="fixed w-full top-0 z-50 transition-all duration-300 border-b border-gray-200 dark:border-white/5 bg-white/80 dark:bg-shineos-950/70 backdrop-blur-xl supports-[backdrop-filter]:bg-white/60 dark:supports-[backdrop-filter]:bg-shineos-950/60" data-astro-cid-3ef6ksr2> <div class="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between" data-astro-cid-3ef6ksr2> <a href="/pr-preview/13" class="group flex items-center gap-2 relative z-50" data-astro-cid-3ef6ksr2> <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 dark:from-shineos-brand dark:to-shineos-cyan flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-blue-500/20 dark:shadow-shineos-brand/20 transition-all" data-astro-cid-3ef6ksr2>
+S
+</div> <span class="text-lg font-bold text-gray-900 dark:text-white tracking-tight" data-astro-cid-3ef6ksr2>Shineos Tech Blog</span> </a> <div class="flex items-center gap-4" data-astro-cid-3ef6ksr2> <nav class="hidden md:block" data-astro-cid-3ef6ksr2> <ul class="flex space-x-8 text-sm font-medium text-gray-600 dark:text-gray-400" data-astro-cid-3ef6ksr2> <li data-astro-cid-3ef6ksr2> <a href="/pr-preview/13" class="hover:text-blue-600 dark:hover:text-white transition-colors" data-astro-cid-3ef6ksr2>ホーム</a> </li> <li data-astro-cid-3ef6ksr2> <a href="/pr-preview/13/archives/1" class="hover:text-blue-600 dark:hover:text-white transition-colors" data-astro-cid-3ef6ksr2>記事一覧</a> </li> <li data-astro-cid-3ef6ksr2> <a href="/pr-preview/13/about" class="hover:text-blue-600 dark:hover:text-white transition-colors" data-astro-cid-3ef6ksr2>私たちについて</a> </li> <li data-astro-cid-3ef6ksr2> <a href="https://shineos.com" target="_blank" rel="noopener noreferrer" class="hover:text-blue-600 dark:hover:text-white transition-colors flex items-center gap-1" data-astro-cid-3ef6ksr2>
+コーポレート
+<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" data-astro-cid-3ef6ksr2><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" data-astro-cid-3ef6ksr2></path></svg> </a> </li> </ul> </nav> <div class="relative z-50 flex items-center gap-4" data-astro-cid-3ef6ksr2> <button id="theme-toggle" type="button" class="relative w-14 h-8 bg-gray-200 dark:bg-gray-700 rounded-full focus:outline-none focus:ring-4 focus:ring-gray-200 dark:focus:ring-gray-700 transition-colors duration-300 ease-in-out" aria-label="Toggle Theme"> <span id="theme-toggle-thumb" class="absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transform transition-transform duration-300 ease-in-out flex items-center justify-center"> <!-- Sun Icon (Light Mode) --> <svg id="theme-toggle-light-icon" class="w-4 h-4 text-orange-400" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"> <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" fill-rule="evenodd" clip-rule="evenodd"></path> </svg> <!-- Moon Icon (Dark Mode) --> <svg id="theme-toggle-dark-icon" class="hidden w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"> <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path> </svg> </span> </button> <script>
+    const themeToggleBtn = document.getElementById("theme-toggle");
+    const themeToggleThumb = document.getElementById("theme-toggle-thumb");
+    const themeToggleDarkIcon = document.getElementById(
+        "theme-toggle-dark-icon",
+    );
+    const themeToggleLightIcon = document.getElementById(
+        "theme-toggle-light-icon",
+    );
+
+    // Function to update UI based on theme
+    const updateThemeUI = (isDark) => {
+        if (isDark) {
+            themeToggleThumb.classList.add("translate-x-6");
+            themeToggleLightIcon.classList.add("hidden");
+            themeToggleDarkIcon.classList.remove("hidden");
+        } else {
+            themeToggleThumb.classList.remove("translate-x-6");
+            themeToggleLightIcon.classList.remove("hidden");
+            themeToggleDarkIcon.classList.add("hidden");
+        }
+    };
+
+    // Initial check
+    if (
+        localStorage.getItem("color-theme") === "dark" ||
+        (!("color-theme" in localStorage) &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches)
+    ) {
+        updateThemeUI(true);
+    } else {
+        updateThemeUI(false);
+    }
+
+    // Event Listener
+    themeToggleBtn.addEventListener("click", function () {
+        const isDark = document.documentElement.classList.contains("dark");
+
+        // Toggle theme
+        if (isDark) {
+            document.documentElement.classList.remove("dark");
+            localStorage.setItem("color-theme", "light");
+            updateThemeUI(false);
+        } else {
+            document.documentElement.classList.add("dark");
+            localStorage.setItem("color-theme", "dark");
+            updateThemeUI(true);
+        }
+    });
+</script> <!-- Mobile Menu Button --> <button id="mobile-menu-btn" class="md:hidden p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition-colors" aria-label="Menu" data-astro-cid-3ef6ksr2> <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" data-astro-cid-3ef6ksr2> <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" data-astro-cid-3ef6ksr2></path> </svg> </button> </div> </div> </div> <!-- Mobile Menu Overlay --> <div id="mobile-menu" class="fixed inset-0 bg-white dark:bg-shineos-950 z-40 opacity-0 invisible transition-all duration-300 md:hidden flex flex-col pt-24 px-6" data-astro-cid-3ef6ksr2> <nav class="flex flex-col space-y-6 text-lg font-medium text-gray-900 dark:text-white" data-astro-cid-3ef6ksr2> <a href="/pr-preview/13" class="mobile-link py-2 border-b border-gray-100 dark:border-white/5" data-astro-cid-3ef6ksr2>ホーム</a> <a href="/pr-preview/13/archives/1" class="mobile-link py-2 border-b border-gray-100 dark:border-white/5" data-astro-cid-3ef6ksr2>記事一覧</a> <a href="/pr-preview/13/about" class="mobile-link py-2 border-b border-gray-100 dark:border-white/5" data-astro-cid-3ef6ksr2>私たちについて</a> <a href="https://shineos.com" target="_blank" rel="noopener noreferrer" class="mobile-link py-2 border-b border-gray-100 dark:border-white/5 flex items-center justify-between" data-astro-cid-3ef6ksr2>
+コーポレート
+<svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" data-astro-cid-3ef6ksr2><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" data-astro-cid-3ef6ksr2></path></svg> </a> </nav> </div> </header>  <script type="module">const o=document.getElementById("mobile-menu-btn"),e=document.getElementById("mobile-menu"),i=document.querySelectorAll(".mobile-link");let s=!1;o&&e&&(o.addEventListener("click",()=>{s=!s,s?(e.classList.remove("opacity-0","invisible"),e.classList.add("opacity-100","visible"),document.body.classList.add("menu-open"),o.innerHTML='<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>',document.body.style.overflow="hidden"):(e.classList.remove("opacity-100","visible"),e.classList.add("opacity-0","invisible"),document.body.classList.remove("menu-open"),o.innerHTML='<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>',document.body.style.overflow="")}),i.forEach(n=>{n.addEventListener("click",()=>{s=!1,e.classList.remove("opacity-100","visible"),e.classList.add("opacity-0","invisible"),document.body.classList.remove("menu-open"),o.innerHTML='<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>',document.body.style.overflow=""})}));</script> <div class="h-16" data-astro-cid-3ef6ksr2></div> <!-- Spacer for fixed header --> <main class="flex-grow max-w-7xl mx-auto px-6 py-12 w-full relative z-10">   <div class="max-w-[1600px] mx-auto px-4 lg:px-0 mb-4"> <nav class="flex text-sm text-gray-500 dark:text-gray-400 mb-6 overflow-x-auto whitespace-nowrap pb-2" aria-label="Breadcrumb"> <ol class="inline-flex items-center space-x-1 md:space-x-3"> <li class="inline-flex items-center"> <a href="/pr-preview/13" class="inline-flex items-center hover:text-blue-600 dark:hover:text-white transition-colors"> <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path></svg>
+ホーム
+</a> </li> <li> <div class="flex items-center"> <svg class="w-6 h-6 text-gray-400" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"> <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path> </svg> <a href="/pr-preview/13/archives/1" class="ml-1 hover:text-blue-600 dark:hover:text-white md:ml-2 transition-colors"> 記事一覧 </a> </div> </li><li> <div class="flex items-center"> <svg class="w-6 h-6 text-gray-400" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"> <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path> </svg> <span class="ml-1 text-gray-700 dark:text-gray-200 font-medium md:ml-2"> LangChainとLangGraphで実現するマルチエージェントシステム </span> </div> </li> </ol> </nav> </div> <div class="grid md:grid-cols-[1fr_300px] gap-8 max-w-[1600px] mx-auto px-4 lg:px-0"> <!-- Main Content Column --> <main class="min-w-0"> <article class="bg-white dark:bg-shineos-900 rounded-3xl p-6 lg:p-10 shadow-sm border border-gray-100 dark:border-white/5"> <!-- Article Header --> <header class="mb-12 text-center md:text-left"> <!-- Header Image (Top of Article) --> <div class="mb-8 rounded-2xl overflow-hidden shadow-md aspect-video w-full bg-gray-100 dark:bg-shineos-800"> <img src="/pr-preview/13/images/posts/2025/12/langchain-langgraph-multi-agent/header.webp" alt="LangChainとLangGraphで実現するマルチエージェントシステム" class="w-full h-full object-cover"> </div> <h1 class="text-3xl md:text-4xl font-extrabold mb-6 text-gray-900 dark:text-white leading-tight tracking-tight" data-pagefind-weight="10"> LangChainとLangGraphで実現するマルチエージェントシステム </h1> <div class="flex flex-wrap items-center gap-4 text-gray-500 dark:text-gray-400 text-sm mb-6">  <time datetime="2025-12-02T00:00:00.000Z" class="flex items-center gap-1 font-mono"> <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg> 2025.12.2 </time> <span class="text-gray-300 dark:text-gray-600">|</span> <span class="flex items-center gap-1"> Shineos Dev Team </span> </div> <div class="flex flex-wrap gap-2 mb-6"> <a href="/pr-preview/13/tags/LangChain" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs font-bold rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors">
+#LangChain </a><a href="/pr-preview/13/tags/LangGraph" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs font-bold rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors">
+#LangGraph </a><a href="/pr-preview/13/tags/AIエージェント" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs font-bold rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors">
+#AIエージェント </a><a href="/pr-preview/13/tags/マルチエージェント" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs font-bold rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors">
+#マルチエージェント </a><a href="/pr-preview/13/tags/LLM" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs font-bold rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors">
+#LLM </a> </div> <div> <div class="flex items-center space-x-4"> <span class="text-sm font-bold text-gray-500">Share:</span> <a href="https://twitter.com/intent/tweet?text=LangChain%E3%81%A8LangGraph%E3%81%A7%E5%AE%9F%E7%8F%BE%E3%81%99%E3%82%8B%E3%83%9E%E3%83%AB%E3%83%81%E3%82%A8%E3%83%BC%E3%82%B8%E3%82%A7%E3%83%B3%E3%83%88%E3%82%B7%E3%82%B9%E3%83%86%E3%83%A0&url=https%3A%2F%2Fblog.shineos.com%2Fpr-preview%2F13%2Fposts%2F2025-12-02-langchain-langgraph-multi-agent%2F" target="_blank" rel="noopener noreferrer" class="p-2 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors" aria-label="Share on X"> <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path></svg> </a> <a href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fblog.shineos.com%2Fpr-preview%2F13%2Fposts%2F2025-12-02-langchain-langgraph-multi-agent%2F" target="_blank" rel="noopener noreferrer" class="p-2 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors" aria-label="Share on LinkedIn"> <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M20.5 2h-17A1.5 1.5 0 002 3.5v17A1.5 1.5 0 003.5 22h17a1.5 1.5 0 001.5-1.5v-17A1.5 1.5 0 0020.5 2zM8 19H5v-9h3zM6.5 8.25A1.75 1.75 0 118.3 6.5a1.78 1.78 0 01-1.8 1.75zM19 19h-3v-4.74c0-1.42-.6-1.93-1.38-1.93A1.74 1.74 0 0013 14.19V19h-3v-9h2.9v1.3a3.11 3.11 0 012.7-1.4c1.55 0 3.36.86 3.36 3.66z"></path></svg> </a> </div> </div> </header> <!-- Article Content --> <div class="prose prose-slate dark:prose-invert max-w-none
+                prose-h2:text-2xl prose-h2:font-bold prose-h2:mt-12 prose-h2:mb-6 prose-h2:pb-2 prose-h2:border-b prose-h2:border-gray-200 dark:prose-h2:border-slate-700
+                prose-h3:text-xl prose-h3:font-bold prose-h3:mt-8 prose-h3:mb-4
+                prose-p:leading-8 prose-p:text-slate-700 dark:prose-p:text-slate-200
+                prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline
+                prose-img:rounded-xl prose-img:shadow-md
+                custom-prose" data-pagefind-body> <h2 id="はじめに">はじめに</h2>
+<p>AIエージェントが注目を集める中、「複数のエージェントを連携させて、より複雑なタスクを自動化したい」というニーズが高まっています。</p>
+<p>単一のAIエージェントでは対応が難しい複雑な業務プロセスも、専門性を持った複数のエージェントを協調させることで、効率的に処理できます。</p>
+<p>本記事では、LangChainとLangGraphを使ったマルチエージェントシステムの設計と実装方法を、私たちの実践経験を基に解説します。</p>
+<h2 id="マルチエージェントシステムとは">マルチエージェントシステムとは？</h2>
+<p>マルチエージェントシステムは、複数の自律的なAIエージェントが協調して目標を達成するシステムです。各エージェントは特定の役割を持ち、互いに情報を交換しながらタスクを遂行します。</p>
+<h3 id="単一エージェント-vs-マルチエージェント">単一エージェント vs マルチエージェント</h3>
+<p><img src="/images/posts/2025/12/langchain-langgraph-multi-agent/multi-agent-comparison.webp" alt="単一エージェント vs マルチエージェント"/></p>
+<p><strong>単一エージェント</strong>は、ユーザーからの入力を1つのエージェントが処理して結果を返すシンプルな構造です。</p>
+<p>一方、<strong>マルチエージェント</strong>では、コーディネーターが複数の専門エージェント（A、B、C）にタスクを分配し、それぞれの結果を統合して最終的な回答を生成します。この構造により、複雑なタスクを効率的に処理できます。</p>
+<h2 id="まとめ">まとめ</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>項目</th><th>説明</th><th>メリット</th></tr></thead><tbody><tr><td><strong>役割分担</strong></td><td>各エージェントが専門タスクを担当</td><td>効率性と精度の向上</td></tr><tr><td><strong>協調動作</strong></td><td>エージェント間で情報を共有</td><td>複雑なタスクの分解と並列処理</td></tr><tr><td><strong>LangChain</strong></td><td>エージェントの構築とツール連携</td><td>豊富なツールとインテグレーション</td></tr><tr><td><strong>LangGraph</strong></td><td>エージェント間のワークフロー制御</td><td>柔軟な状態管理とフロー設計</td></tr><tr><td><strong>適用例</strong></td><td>リサーチ、コンテンツ作成、データ分析</td><td>業務自動化の高度化</td></tr></tbody></table>
+<h2 id="langchainとlanggraphの基礎">LangChainとLangGraphの基礎</h2>
+<h3 id="langchainとは">LangChainとは</h3>
+<p>LangChainは、LLMアプリケーションの開発を支援するフレームワークです。エージェント、ツール、メモリーなどの抽象化により、複雑なAIシステムを効率的に構築できます。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="python"><code><span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> langchain.agents </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> AgentExecutor, create_openai_functions_agent</span></span>
+<span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> langchain.tools </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> tool</span></span>
+<span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> langchain_openai </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> ChatOpenAI</span></span>
+<span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> langchain.prompts </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> ChatPromptTemplate</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># ツールの定義</span></span>
+<span class="line"><span style="color:#B392F0">@tool</span></span>
+<span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> search_database</span><span style="color:#E1E4E8">(query: </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">) -&gt; </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;データベースから情報を検索する&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#6A737D">    # 実際の検索ロジック</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#F97583"> f</span><span style="color:#9ECBFF">&quot;検索結果: </span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">query</span><span style="color:#79B8FF">}</span><span style="color:#9ECBFF">に関する情報&quot;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># LLMの初期化</span></span>
+<span class="line"><span style="color:#E1E4E8">llm </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> ChatOpenAI(</span><span style="color:#FFAB70">model</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">&quot;gpt-4o&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">temperature</span><span style="color:#F97583">=</span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># プロンプトテンプレート</span></span>
+<span class="line"><span style="color:#E1E4E8">prompt </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> ChatPromptTemplate.from_messages([</span></span>
+<span class="line"><span style="color:#E1E4E8">    (</span><span style="color:#9ECBFF">&quot;system&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&quot;あなたは親切なアシスタントです。&quot;</span><span style="color:#E1E4E8">),</span></span>
+<span class="line"><span style="color:#E1E4E8">    (</span><span style="color:#9ECBFF">&quot;human&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&quot;</span><span style="color:#79B8FF">{input}</span><span style="color:#9ECBFF">&quot;</span><span style="color:#E1E4E8">),</span></span>
+<span class="line"><span style="color:#E1E4E8">    (</span><span style="color:#9ECBFF">&quot;placeholder&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&quot;</span><span style="color:#79B8FF">{agent_scratchpad}</span><span style="color:#9ECBFF">&quot;</span><span style="color:#E1E4E8">),</span></span>
+<span class="line"><span style="color:#E1E4E8">])</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># エージェントの作成</span></span>
+<span class="line"><span style="color:#E1E4E8">agent </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> create_openai_functions_agent(</span></span>
+<span class="line"><span style="color:#FFAB70">    llm</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">llm,</span></span>
+<span class="line"><span style="color:#FFAB70">    tools</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">[search_database],</span></span>
+<span class="line"><span style="color:#FFAB70">    prompt</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">prompt</span></span>
+<span class="line"><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># エージェント実行器</span></span>
+<span class="line"><span style="color:#E1E4E8">agent_executor </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> AgentExecutor(</span></span>
+<span class="line"><span style="color:#FFAB70">    agent</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">agent,</span></span>
+<span class="line"><span style="color:#FFAB70">    tools</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">[search_database],</span></span>
+<span class="line"><span style="color:#FFAB70">    verbose</span><span style="color:#F97583">=</span><span style="color:#79B8FF">True</span></span>
+<span class="line"><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 実行</span></span>
+<span class="line"><span style="color:#E1E4E8">result </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> agent_executor.invoke({</span><span style="color:#9ECBFF">&quot;input&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;最新の売上データを教えて&quot;</span><span style="color:#E1E4E8">})</span></span></code></pre>
+<h3 id="langgraphとは">LangGraphとは</h3>
+<p>LangGraphは、複雑な状態を持つエージェントワークフローを構築するためのライブラリです。グラフベースでエージェントの動作フローを定義できます。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="python"><code><span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> langgraph.graph </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> StateGraph, </span><span style="color:#79B8FF">END</span></span>
+<span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> typing </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> TypedDict, Annotated</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> operator</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 状態の定義</span></span>
+<span class="line"><span style="color:#F97583">class</span><span style="color:#B392F0"> AgentState</span><span style="color:#E1E4E8">(</span><span style="color:#B392F0">TypedDict</span><span style="color:#E1E4E8">):</span></span>
+<span class="line"><span style="color:#E1E4E8">    messages: Annotated[</span><span style="color:#79B8FF">list</span><span style="color:#E1E4E8">, operator.add]</span></span>
+<span class="line"><span style="color:#E1E4E8">    current_agent: </span><span style="color:#79B8FF">str</span></span>
+<span class="line"><span style="color:#E1E4E8">    task_result: </span><span style="color:#79B8FF">dict</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># グラフの作成</span></span>
+<span class="line"><span style="color:#E1E4E8">workflow </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> StateGraph(AgentState)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># ノード（処理）の追加</span></span>
+<span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> coordinator_node</span><span style="color:#E1E4E8">(state: AgentState):</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;コーディネーターノード&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#6A737D">    # タスクを分析して次のエージェントを決定</span></span>
+<span class="line"><span style="color:#E1E4E8">    next_agent </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> determine_next_agent(state[</span><span style="color:#9ECBFF">&quot;messages&quot;</span><span style="color:#E1E4E8">][</span><span style="color:#F97583">-</span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">])</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> {</span><span style="color:#9ECBFF">&quot;current_agent&quot;</span><span style="color:#E1E4E8">: next_agent}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> agent_a_node</span><span style="color:#E1E4E8">(state: AgentState):</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;エージェントAの処理&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    result </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> agent_a.invoke(state[</span><span style="color:#9ECBFF">&quot;messages&quot;</span><span style="color:#E1E4E8">])</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> {</span><span style="color:#9ECBFF">&quot;messages&quot;</span><span style="color:#E1E4E8">: [result], </span><span style="color:#9ECBFF">&quot;task_result&quot;</span><span style="color:#E1E4E8">: {</span><span style="color:#9ECBFF">&quot;agent_a&quot;</span><span style="color:#E1E4E8">: result}}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">workflow.add_node(</span><span style="color:#9ECBFF">&quot;coordinator&quot;</span><span style="color:#E1E4E8">, coordinator_node)</span></span>
+<span class="line"><span style="color:#E1E4E8">workflow.add_node(</span><span style="color:#9ECBFF">&quot;agent_a&quot;</span><span style="color:#E1E4E8">, agent_a_node)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># エッジ（遷移）の追加</span></span>
+<span class="line"><span style="color:#E1E4E8">workflow.add_edge(</span><span style="color:#9ECBFF">&quot;coordinator&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&quot;agent_a&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">workflow.add_edge(</span><span style="color:#9ECBFF">&quot;agent_a&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">END</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># エントリーポイントの設定</span></span>
+<span class="line"><span style="color:#E1E4E8">workflow.set_entry_point(</span><span style="color:#9ECBFF">&quot;coordinator&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># コンパイル</span></span>
+<span class="line"><span style="color:#E1E4E8">app </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> workflow.compile()</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 実行</span></span>
+<span class="line"><span style="color:#E1E4E8">result </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> app.invoke({</span><span style="color:#9ECBFF">&quot;messages&quot;</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">&quot;タスクを実行して&quot;</span><span style="color:#E1E4E8">], </span><span style="color:#9ECBFF">&quot;current_agent&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&quot;task_result&quot;</span><span style="color:#E1E4E8">: {}})</span></span></code></pre>
+<h2 id="マルチエージェントシステムの設計パターン">マルチエージェントシステムの設計パターン</h2>
+<h3 id="パターン1-順次実行パターン">パターン1: 順次実行パターン</h3>
+<p>エージェントが順番にタスクを処理するシンプルなパターンです。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="python"><code><span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> langgraph.graph </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> StateGraph, </span><span style="color:#79B8FF">END</span></span>
+<span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> typing </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> TypedDict</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">class</span><span style="color:#B392F0"> SequentialState</span><span style="color:#E1E4E8">(</span><span style="color:#B392F0">TypedDict</span><span style="color:#E1E4E8">):</span></span>
+<span class="line"><span style="color:#79B8FF">    input</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">str</span></span>
+<span class="line"><span style="color:#E1E4E8">    research_result: </span><span style="color:#79B8FF">str</span></span>
+<span class="line"><span style="color:#E1E4E8">    draft_result: </span><span style="color:#79B8FF">str</span></span>
+<span class="line"><span style="color:#E1E4E8">    final_result: </span><span style="color:#79B8FF">str</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> research_agent</span><span style="color:#E1E4E8">(state: SequentialState):</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;リサーチエージェント&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    research_prompt </span><span style="color:#F97583">=</span><span style="color:#F97583"> f</span><span style="color:#9ECBFF">&quot;以下のトピックについて調査してください: </span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">state[</span><span style="color:#9ECBFF">&#39;input&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#79B8FF">}</span><span style="color:#9ECBFF">&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    result </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> llm.invoke(research_prompt)</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> {</span><span style="color:#9ECBFF">&quot;research_result&quot;</span><span style="color:#E1E4E8">: result.content}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> writer_agent</span><span style="color:#E1E4E8">(state: SequentialState):</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;ライターエージェント&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    write_prompt </span><span style="color:#F97583">=</span><span style="color:#F97583"> f</span><span style="color:#9ECBFF">&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#9ECBFF">以下の調査結果を基に記事を作成してください:</span></span>
+<span class="line"><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">state[</span><span style="color:#9ECBFF">&#39;research_result&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#79B8FF">}</span></span>
+<span class="line"><span style="color:#9ECBFF">&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    result </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> llm.invoke(write_prompt)</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> {</span><span style="color:#9ECBFF">&quot;draft_result&quot;</span><span style="color:#E1E4E8">: result.content}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> editor_agent</span><span style="color:#E1E4E8">(state: SequentialState):</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;編集者エージェント&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    edit_prompt </span><span style="color:#F97583">=</span><span style="color:#F97583"> f</span><span style="color:#9ECBFF">&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#9ECBFF">以下の記事を校正・改善してください:</span></span>
+<span class="line"><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">state[</span><span style="color:#9ECBFF">&#39;draft_result&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#79B8FF">}</span></span>
+<span class="line"><span style="color:#9ECBFF">&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    result </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> llm.invoke(edit_prompt)</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> {</span><span style="color:#9ECBFF">&quot;final_result&quot;</span><span style="color:#E1E4E8">: result.content}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># ワークフローの構築</span></span>
+<span class="line"><span style="color:#E1E4E8">workflow </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> StateGraph(SequentialState)</span></span>
+<span class="line"><span style="color:#E1E4E8">workflow.add_node(</span><span style="color:#9ECBFF">&quot;research&quot;</span><span style="color:#E1E4E8">, research_agent)</span></span>
+<span class="line"><span style="color:#E1E4E8">workflow.add_node(</span><span style="color:#9ECBFF">&quot;writer&quot;</span><span style="color:#E1E4E8">, writer_agent)</span></span>
+<span class="line"><span style="color:#E1E4E8">workflow.add_node(</span><span style="color:#9ECBFF">&quot;editor&quot;</span><span style="color:#E1E4E8">, editor_agent)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">workflow.add_edge(</span><span style="color:#9ECBFF">&quot;research&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&quot;writer&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">workflow.add_edge(</span><span style="color:#9ECBFF">&quot;writer&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&quot;editor&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">workflow.add_edge(</span><span style="color:#9ECBFF">&quot;editor&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">END</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">workflow.set_entry_point(</span><span style="color:#9ECBFF">&quot;research&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">sequential_app </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> workflow.compile()</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 実行</span></span>
+<span class="line"><span style="color:#E1E4E8">result </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> sequential_app.invoke({</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;input&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;AIエージェントの最新トレンド&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;research_result&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;draft_result&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;final_result&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">})</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#79B8FF">print</span><span style="color:#E1E4E8">(result[</span><span style="color:#9ECBFF">&quot;final_result&quot;</span><span style="color:#E1E4E8">])</span></span></code></pre>
+<h3 id="パターン2-並列実行パターン">パターン2: 並列実行パターン</h3>
+<p>複数のエージェントが同時にタスクを処理し、結果を統合するパターンです。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="python"><code><span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> typing </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> List</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">class</span><span style="color:#B392F0"> ParallelState</span><span style="color:#E1E4E8">(</span><span style="color:#B392F0">TypedDict</span><span style="color:#E1E4E8">):</span></span>
+<span class="line"><span style="color:#79B8FF">    input</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">str</span></span>
+<span class="line"><span style="color:#E1E4E8">    analysis_results: List[</span><span style="color:#79B8FF">dict</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#E1E4E8">    final_summary: </span><span style="color:#79B8FF">str</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> market_analyst</span><span style="color:#E1E4E8">(state: ParallelState):</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;市場分析エージェント&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    prompt </span><span style="color:#F97583">=</span><span style="color:#F97583"> f</span><span style="color:#9ECBFF">&quot;市場トレンドを分析: </span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">state[</span><span style="color:#9ECBFF">&#39;input&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#79B8FF">}</span><span style="color:#9ECBFF">&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    result </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> llm.invoke(prompt)</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> {</span><span style="color:#9ECBFF">&quot;analysis_results&quot;</span><span style="color:#E1E4E8">: [{</span><span style="color:#9ECBFF">&quot;type&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;market&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&quot;content&quot;</span><span style="color:#E1E4E8">: result.content}]}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> competitor_analyst</span><span style="color:#E1E4E8">(state: ParallelState):</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;競合分析エージェント&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    prompt </span><span style="color:#F97583">=</span><span style="color:#F97583"> f</span><span style="color:#9ECBFF">&quot;競合他社を分析: </span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">state[</span><span style="color:#9ECBFF">&#39;input&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#79B8FF">}</span><span style="color:#9ECBFF">&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    result </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> llm.invoke(prompt)</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> {</span><span style="color:#9ECBFF">&quot;analysis_results&quot;</span><span style="color:#E1E4E8">: [{</span><span style="color:#9ECBFF">&quot;type&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;competitor&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&quot;content&quot;</span><span style="color:#E1E4E8">: result.content}]}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> tech_analyst</span><span style="color:#E1E4E8">(state: ParallelState):</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;技術分析エージェント&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    prompt </span><span style="color:#F97583">=</span><span style="color:#F97583"> f</span><span style="color:#9ECBFF">&quot;技術動向を分析: </span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">state[</span><span style="color:#9ECBFF">&#39;input&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#79B8FF">}</span><span style="color:#9ECBFF">&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    result </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> llm.invoke(prompt)</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> {</span><span style="color:#9ECBFF">&quot;analysis_results&quot;</span><span style="color:#E1E4E8">: [{</span><span style="color:#9ECBFF">&quot;type&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;technology&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&quot;content&quot;</span><span style="color:#E1E4E8">: result.content}]}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> synthesizer</span><span style="color:#E1E4E8">(state: ParallelState):</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;統合エージェント&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    analyses </span><span style="color:#F97583">=</span><span style="color:#9ECBFF"> &quot;</span><span style="color:#79B8FF">\n\n</span><span style="color:#9ECBFF">&quot;</span><span style="color:#E1E4E8">.join([</span></span>
+<span class="line"><span style="color:#F97583">        f</span><span style="color:#9ECBFF">&quot;【</span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">a[</span><span style="color:#9ECBFF">&#39;type&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#79B8FF">}</span><span style="color:#9ECBFF">】</span><span style="color:#79B8FF">\n{</span><span style="color:#E1E4E8">a[</span><span style="color:#9ECBFF">&#39;content&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#79B8FF">}</span><span style="color:#9ECBFF">&quot;</span></span>
+<span class="line"><span style="color:#F97583">        for</span><span style="color:#E1E4E8"> a </span><span style="color:#F97583">in</span><span style="color:#E1E4E8"> state[</span><span style="color:#9ECBFF">&#39;analysis_results&#39;</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#E1E4E8">    ])</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#E1E4E8">    prompt </span><span style="color:#F97583">=</span><span style="color:#F97583"> f</span><span style="color:#9ECBFF">&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#9ECBFF">以下の分析結果を統合して総合レポートを作成してください:</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">analyses</span><span style="color:#79B8FF">}</span></span>
+<span class="line"><span style="color:#9ECBFF">&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    result </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> llm.invoke(prompt)</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> {</span><span style="color:#9ECBFF">&quot;final_summary&quot;</span><span style="color:#E1E4E8">: result.content}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 並列ワークフローの構築</span></span>
+<span class="line"><span style="color:#E1E4E8">parallel_workflow </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> StateGraph(ParallelState)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 並列実行するノードを追加</span></span>
+<span class="line"><span style="color:#E1E4E8">parallel_workflow.add_node(</span><span style="color:#9ECBFF">&quot;market&quot;</span><span style="color:#E1E4E8">, market_analyst)</span></span>
+<span class="line"><span style="color:#E1E4E8">parallel_workflow.add_node(</span><span style="color:#9ECBFF">&quot;competitor&quot;</span><span style="color:#E1E4E8">, competitor_analyst)</span></span>
+<span class="line"><span style="color:#E1E4E8">parallel_workflow.add_node(</span><span style="color:#9ECBFF">&quot;tech&quot;</span><span style="color:#E1E4E8">, tech_analyst)</span></span>
+<span class="line"><span style="color:#E1E4E8">parallel_workflow.add_node(</span><span style="color:#9ECBFF">&quot;synthesizer&quot;</span><span style="color:#E1E4E8">, synthesizer)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 並列実行の設定</span></span>
+<span class="line"><span style="color:#E1E4E8">parallel_workflow.set_entry_point(</span><span style="color:#9ECBFF">&quot;market&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">parallel_workflow.set_entry_point(</span><span style="color:#9ECBFF">&quot;competitor&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">parallel_workflow.set_entry_point(</span><span style="color:#9ECBFF">&quot;tech&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># すべての並列ノードから統合ノードへ</span></span>
+<span class="line"><span style="color:#E1E4E8">parallel_workflow.add_edge(</span><span style="color:#9ECBFF">&quot;market&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&quot;synthesizer&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">parallel_workflow.add_edge(</span><span style="color:#9ECBFF">&quot;competitor&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&quot;synthesizer&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">parallel_workflow.add_edge(</span><span style="color:#9ECBFF">&quot;tech&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&quot;synthesizer&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">parallel_workflow.add_edge(</span><span style="color:#9ECBFF">&quot;synthesizer&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">END</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">parallel_app </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> parallel_workflow.compile()</span></span></code></pre>
+<h3 id="パターン3-条件分岐パターン">パターン3: 条件分岐パターン</h3>
+<p>状態に応じて動的にエージェントの実行フローを切り替えるパターンです。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="python"><code><span class="line"><span style="color:#F97583">class</span><span style="color:#B392F0"> ConditionalState</span><span style="color:#E1E4E8">(</span><span style="color:#B392F0">TypedDict</span><span style="color:#E1E4E8">):</span></span>
+<span class="line"><span style="color:#E1E4E8">    query: </span><span style="color:#79B8FF">str</span></span>
+<span class="line"><span style="color:#E1E4E8">    query_type: </span><span style="color:#79B8FF">str</span></span>
+<span class="line"><span style="color:#E1E4E8">    result: </span><span style="color:#79B8FF">str</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> classifier_agent</span><span style="color:#E1E4E8">(state: ConditionalState):</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;分類エージェント&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    prompt </span><span style="color:#F97583">=</span><span style="color:#F97583"> f</span><span style="color:#9ECBFF">&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#9ECBFF">以下の質問を分類してください。</span></span>
+<span class="line"><span style="color:#9ECBFF">- &#39;technical&#39;: 技術的な質問</span></span>
+<span class="line"><span style="color:#9ECBFF">- &#39;business&#39;: ビジネスに関する質問</span></span>
+<span class="line"><span style="color:#9ECBFF">- &#39;general&#39;: 一般的な質問</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">質問: </span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">state[</span><span style="color:#9ECBFF">&#39;query&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#79B8FF">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">分類（technical/business/generalのいずれか）:</span></span>
+<span class="line"><span style="color:#9ECBFF">&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    result </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> llm.invoke(prompt)</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> {</span><span style="color:#9ECBFF">&quot;query_type&quot;</span><span style="color:#E1E4E8">: result.content.strip().lower()}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> technical_agent</span><span style="color:#E1E4E8">(state: ConditionalState):</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;技術専門エージェント&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    prompt </span><span style="color:#F97583">=</span><span style="color:#F97583"> f</span><span style="color:#9ECBFF">&quot;技術的な観点から回答: </span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">state[</span><span style="color:#9ECBFF">&#39;query&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#79B8FF">}</span><span style="color:#9ECBFF">&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    result </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> llm.invoke(prompt)</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> {</span><span style="color:#9ECBFF">&quot;result&quot;</span><span style="color:#E1E4E8">: result.content}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> business_agent</span><span style="color:#E1E4E8">(state: ConditionalState):</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;ビジネス専門エージェント&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    prompt </span><span style="color:#F97583">=</span><span style="color:#F97583"> f</span><span style="color:#9ECBFF">&quot;ビジネスの観点から回答: </span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">state[</span><span style="color:#9ECBFF">&#39;query&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#79B8FF">}</span><span style="color:#9ECBFF">&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    result </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> llm.invoke(prompt)</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> {</span><span style="color:#9ECBFF">&quot;result&quot;</span><span style="color:#E1E4E8">: result.content}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> general_agent</span><span style="color:#E1E4E8">(state: ConditionalState):</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;一般エージェント&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    prompt </span><span style="color:#F97583">=</span><span style="color:#F97583"> f</span><span style="color:#9ECBFF">&quot;一般的な観点から回答: </span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">state[</span><span style="color:#9ECBFF">&#39;query&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#79B8FF">}</span><span style="color:#9ECBFF">&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    result </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> llm.invoke(prompt)</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> {</span><span style="color:#9ECBFF">&quot;result&quot;</span><span style="color:#E1E4E8">: result.content}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> route_query</span><span style="color:#E1E4E8">(state: ConditionalState):</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;ルーティング関数&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    query_type </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> state.get(</span><span style="color:#9ECBFF">&quot;query_type&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&quot;general&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    if</span><span style="color:#E1E4E8"> query_type </span><span style="color:#F97583">==</span><span style="color:#9ECBFF"> &quot;technical&quot;</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#9ECBFF"> &quot;technical&quot;</span></span>
+<span class="line"><span style="color:#F97583">    elif</span><span style="color:#E1E4E8"> query_type </span><span style="color:#F97583">==</span><span style="color:#9ECBFF"> &quot;business&quot;</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#9ECBFF"> &quot;business&quot;</span></span>
+<span class="line"><span style="color:#F97583">    else</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#9ECBFF"> &quot;general&quot;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 条件分岐ワークフローの構築</span></span>
+<span class="line"><span style="color:#E1E4E8">conditional_workflow </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> StateGraph(ConditionalState)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">conditional_workflow.add_node(</span><span style="color:#9ECBFF">&quot;classifier&quot;</span><span style="color:#E1E4E8">, classifier_agent)</span></span>
+<span class="line"><span style="color:#E1E4E8">conditional_workflow.add_node(</span><span style="color:#9ECBFF">&quot;technical&quot;</span><span style="color:#E1E4E8">, technical_agent)</span></span>
+<span class="line"><span style="color:#E1E4E8">conditional_workflow.add_node(</span><span style="color:#9ECBFF">&quot;business&quot;</span><span style="color:#E1E4E8">, business_agent)</span></span>
+<span class="line"><span style="color:#E1E4E8">conditional_workflow.add_node(</span><span style="color:#9ECBFF">&quot;general&quot;</span><span style="color:#E1E4E8">, general_agent)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># エントリーポイント</span></span>
+<span class="line"><span style="color:#E1E4E8">conditional_workflow.set_entry_point(</span><span style="color:#9ECBFF">&quot;classifier&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 条件分岐</span></span>
+<span class="line"><span style="color:#E1E4E8">conditional_workflow.add_conditional_edges(</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;classifier&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">    route_query,</span></span>
+<span class="line"><span style="color:#E1E4E8">    {</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;technical&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;technical&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;business&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;business&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;general&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;general&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 各エージェントから終了へ</span></span>
+<span class="line"><span style="color:#E1E4E8">conditional_workflow.add_edge(</span><span style="color:#9ECBFF">&quot;technical&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">END</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">conditional_workflow.add_edge(</span><span style="color:#9ECBFF">&quot;business&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">END</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">conditional_workflow.add_edge(</span><span style="color:#9ECBFF">&quot;general&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">END</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">conditional_app </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> conditional_workflow.compile()</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 実行例</span></span>
+<span class="line"><span style="color:#E1E4E8">result </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> conditional_app.invoke({</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;query&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;Kubernetesのデプロイメント戦略について教えてください&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;query_type&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;result&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">})</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#79B8FF">print</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">f</span><span style="color:#9ECBFF">&quot;回答: </span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">result[</span><span style="color:#9ECBFF">&#39;result&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#79B8FF">}</span><span style="color:#9ECBFF">&quot;</span><span style="color:#E1E4E8">)</span></span></code></pre>
+<h2 id="実践例-コンテンツ制作システム">実践例: コンテンツ制作システム</h2>
+<p>複数のエージェントを連携させた実用的なコンテンツ制作システムを実装します。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="python"><code><span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> langchain.tools </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> tool</span></span>
+<span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> langchain_community.tools.tavily_search </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> TavilySearchResults</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># ツールの定義</span></span>
+<span class="line"><span style="color:#B392F0">@tool</span></span>
+<span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> web_search</span><span style="color:#E1E4E8">(query: </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">) -&gt; </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;Webから情報を検索&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    search </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> TavilySearchResults(</span><span style="color:#FFAB70">max_results</span><span style="color:#F97583">=</span><span style="color:#79B8FF">5</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">    results </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> search.invoke(query)</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#79B8FF"> str</span><span style="color:#E1E4E8">(results)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">@tool</span></span>
+<span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> save_draft</span><span style="color:#E1E4E8">(content: </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">, filename: </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">) -&gt; </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;下書きを保存&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#F97583">    with</span><span style="color:#79B8FF"> open</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">f</span><span style="color:#9ECBFF">&quot;drafts/</span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">filename</span><span style="color:#79B8FF">}</span><span style="color:#9ECBFF">&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&quot;w&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">encoding</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">&quot;utf-8&quot;</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">as</span><span style="color:#E1E4E8"> f:</span></span>
+<span class="line"><span style="color:#E1E4E8">        f.write(content)</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#F97583"> f</span><span style="color:#9ECBFF">&quot;保存完了: </span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">filename</span><span style="color:#79B8FF">}</span><span style="color:#9ECBFF">&quot;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">class</span><span style="color:#B392F0"> ContentCreationState</span><span style="color:#E1E4E8">(</span><span style="color:#B392F0">TypedDict</span><span style="color:#E1E4E8">):</span></span>
+<span class="line"><span style="color:#E1E4E8">    topic: </span><span style="color:#79B8FF">str</span></span>
+<span class="line"><span style="color:#E1E4E8">    research_data: </span><span style="color:#79B8FF">str</span></span>
+<span class="line"><span style="color:#E1E4E8">    outline: </span><span style="color:#79B8FF">str</span></span>
+<span class="line"><span style="color:#E1E4E8">    draft: </span><span style="color:#79B8FF">str</span></span>
+<span class="line"><span style="color:#E1E4E8">    final_content: </span><span style="color:#79B8FF">str</span></span>
+<span class="line"><span style="color:#E1E4E8">    feedback: </span><span style="color:#79B8FF">str</span></span>
+<span class="line"><span style="color:#E1E4E8">    iteration: </span><span style="color:#79B8FF">int</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> research_node</span><span style="color:#E1E4E8">(state: ContentCreationState):</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;リサーチノード&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#6A737D">    # Webから情報を収集</span></span>
+<span class="line"><span style="color:#E1E4E8">    search_results </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> web_search.invoke(state[</span><span style="color:#9ECBFF">&quot;topic&quot;</span><span style="color:#E1E4E8">])</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#6A737D">    # LLMで情報を整理</span></span>
+<span class="line"><span style="color:#E1E4E8">    prompt </span><span style="color:#F97583">=</span><span style="color:#F97583"> f</span><span style="color:#9ECBFF">&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#9ECBFF">トピック: </span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">state[</span><span style="color:#9ECBFF">&#39;topic&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#79B8FF">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">以下の検索結果を分析し、重要なポイントをまとめてください:</span></span>
+<span class="line"><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">search_results</span><span style="color:#79B8FF">}</span></span>
+<span class="line"><span style="color:#9ECBFF">&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    result </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> llm.invoke(prompt)</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> {</span><span style="color:#9ECBFF">&quot;research_data&quot;</span><span style="color:#E1E4E8">: result.content, </span><span style="color:#9ECBFF">&quot;iteration&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> outline_node</span><span style="color:#E1E4E8">(state: ContentCreationState):</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;アウトライン作成ノード&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    prompt </span><span style="color:#F97583">=</span><span style="color:#F97583"> f</span><span style="color:#9ECBFF">&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#9ECBFF">以下のリサーチ結果を基に、記事のアウトラインを作成してください:</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">トピック: </span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">state[</span><span style="color:#9ECBFF">&#39;topic&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#79B8FF">}</span></span>
+<span class="line"><span style="color:#9ECBFF">リサーチ結果:</span></span>
+<span class="line"><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">state[</span><span style="color:#9ECBFF">&#39;research_data&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#79B8FF">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">アウトライン形式:</span></span>
+<span class="line"><span style="color:#9ECBFF">1. はじめに</span></span>
+<span class="line"><span style="color:#9ECBFF">2. 主要セクション1</span></span>
+<span class="line"><span style="color:#9ECBFF">3. 主要セクション2</span></span>
+<span class="line"><span style="color:#9ECBFF">...</span></span>
+<span class="line"><span style="color:#9ECBFF">&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    result </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> llm.invoke(prompt)</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> {</span><span style="color:#9ECBFF">&quot;outline&quot;</span><span style="color:#E1E4E8">: result.content}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> writing_node</span><span style="color:#E1E4E8">(state: ContentCreationState):</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;執筆ノード&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    prompt </span><span style="color:#F97583">=</span><span style="color:#F97583"> f</span><span style="color:#9ECBFF">&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#9ECBFF">以下のアウトラインに従って記事を執筆してください:</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">トピック: </span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">state[</span><span style="color:#9ECBFF">&#39;topic&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#79B8FF">}</span></span>
+<span class="line"><span style="color:#9ECBFF">アウトライン:</span></span>
+<span class="line"><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">state[</span><span style="color:#9ECBFF">&#39;outline&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#79B8FF">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">リサーチ結果:</span></span>
+<span class="line"><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">state[</span><span style="color:#9ECBFF">&#39;research_data&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#79B8FF">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">要件:</span></span>
+<span class="line"><span style="color:#9ECBFF">- 2000文字以上</span></span>
+<span class="line"><span style="color:#9ECBFF">- 具体的な例を含める</span></span>
+<span class="line"><span style="color:#9ECBFF">- 読みやすい構成</span></span>
+<span class="line"><span style="color:#9ECBFF">&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    result </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> llm.invoke(prompt)</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> {</span><span style="color:#9ECBFF">&quot;draft&quot;</span><span style="color:#E1E4E8">: result.content}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> review_node</span><span style="color:#E1E4E8">(state: ContentCreationState):</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;レビューノード&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    prompt </span><span style="color:#F97583">=</span><span style="color:#F97583"> f</span><span style="color:#9ECBFF">&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#9ECBFF">以下の記事をレビューし、改善点をフィードバックしてください:</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">state[</span><span style="color:#9ECBFF">&#39;draft&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#79B8FF">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">評価基準:</span></span>
+<span class="line"><span style="color:#9ECBFF">- 内容の正確性</span></span>
+<span class="line"><span style="color:#9ECBFF">- 構成の論理性</span></span>
+<span class="line"><span style="color:#9ECBFF">- 読みやすさ</span></span>
+<span class="line"><span style="color:#9ECBFF">- 具体例の適切性</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">フィードバック形式:</span></span>
+<span class="line"><span style="color:#9ECBFF">良い点:</span></span>
+<span class="line"><span style="color:#9ECBFF">- ...</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">改善点:</span></span>
+<span class="line"><span style="color:#9ECBFF">- ...</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">総合評価: （改善不要 / 軽微な修正 / 大幅な修正）</span></span>
+<span class="line"><span style="color:#9ECBFF">&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    result </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> llm.invoke(prompt)</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#E1E4E8">    feedback </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> result.content</span></span>
+<span class="line"><span style="color:#6A737D">    # 改善が必要かどうかを判定</span></span>
+<span class="line"><span style="color:#E1E4E8">    needs_revision </span><span style="color:#F97583">=</span><span style="color:#9ECBFF"> &quot;大幅な修正&quot;</span><span style="color:#F97583"> in</span><span style="color:#E1E4E8"> feedback </span><span style="color:#F97583">or</span><span style="color:#9ECBFF"> &quot;軽微な修正&quot;</span><span style="color:#F97583"> in</span><span style="color:#E1E4E8"> feedback</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;feedback&quot;</span><span style="color:#E1E4E8">: feedback,</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;iteration&quot;</span><span style="color:#E1E4E8">: state[</span><span style="color:#9ECBFF">&quot;iteration&quot;</span><span style="color:#E1E4E8">] </span><span style="color:#F97583">+</span><span style="color:#79B8FF"> 1</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> revision_node</span><span style="color:#E1E4E8">(state: ContentCreationState):</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;修正ノード&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    prompt </span><span style="color:#F97583">=</span><span style="color:#F97583"> f</span><span style="color:#9ECBFF">&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#9ECBFF">以下のフィードバックに基づいて記事を修正してください:</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">【元の記事】</span></span>
+<span class="line"><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">state[</span><span style="color:#9ECBFF">&#39;draft&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#79B8FF">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">【フィードバック】</span></span>
+<span class="line"><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">state[</span><span style="color:#9ECBFF">&#39;feedback&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#79B8FF">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">修正版:</span></span>
+<span class="line"><span style="color:#9ECBFF">&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    result </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> llm.invoke(prompt)</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> {</span><span style="color:#9ECBFF">&quot;draft&quot;</span><span style="color:#E1E4E8">: result.content}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> finalize_node</span><span style="color:#E1E4E8">(state: ContentCreationState):</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;最終化ノード&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#6A737D">    # 最終版として確定</span></span>
+<span class="line"><span style="color:#E1E4E8">    final </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> state[</span><span style="color:#9ECBFF">&quot;draft&quot;</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#6A737D">    # ファイルに保存</span></span>
+<span class="line"><span style="color:#E1E4E8">    save_draft.invoke({</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;content&quot;</span><span style="color:#E1E4E8">: final,</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;filename&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#F97583">f</span><span style="color:#9ECBFF">&quot;</span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">state[</span><span style="color:#9ECBFF">&#39;topic&#39;</span><span style="color:#E1E4E8">].replace(</span><span style="color:#9ECBFF">&#39; &#39;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&#39;_&#39;</span><span style="color:#E1E4E8">)</span><span style="color:#79B8FF">}</span><span style="color:#9ECBFF">_final.md&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    })</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> {</span><span style="color:#9ECBFF">&quot;final_content&quot;</span><span style="color:#E1E4E8">: final}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> should_revise</span><span style="color:#E1E4E8">(state: ContentCreationState):</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;修正が必要かどうかを判定&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#6A737D">    # 最大反復回数を超えたら終了</span></span>
+<span class="line"><span style="color:#F97583">    if</span><span style="color:#E1E4E8"> state[</span><span style="color:#9ECBFF">&quot;iteration&quot;</span><span style="color:#E1E4E8">] </span><span style="color:#F97583">&gt;=</span><span style="color:#79B8FF"> 3</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#9ECBFF"> &quot;finalize&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#6A737D">    # フィードバックに基づいて判定</span></span>
+<span class="line"><span style="color:#F97583">    if</span><span style="color:#9ECBFF"> &quot;改善不要&quot;</span><span style="color:#F97583"> in</span><span style="color:#E1E4E8"> state[</span><span style="color:#9ECBFF">&quot;feedback&quot;</span><span style="color:#E1E4E8">]:</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#9ECBFF"> &quot;finalize&quot;</span></span>
+<span class="line"><span style="color:#F97583">    else</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#9ECBFF"> &quot;revise&quot;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># コンテンツ制作ワークフローの構築</span></span>
+<span class="line"><span style="color:#E1E4E8">content_workflow </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> StateGraph(ContentCreationState)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># ノードの追加</span></span>
+<span class="line"><span style="color:#E1E4E8">content_workflow.add_node(</span><span style="color:#9ECBFF">&quot;research&quot;</span><span style="color:#E1E4E8">, research_node)</span></span>
+<span class="line"><span style="color:#E1E4E8">content_workflow.add_node(</span><span style="color:#9ECBFF">&quot;outline&quot;</span><span style="color:#E1E4E8">, outline_node)</span></span>
+<span class="line"><span style="color:#E1E4E8">content_workflow.add_node(</span><span style="color:#9ECBFF">&quot;writing&quot;</span><span style="color:#E1E4E8">, writing_node)</span></span>
+<span class="line"><span style="color:#E1E4E8">content_workflow.add_node(</span><span style="color:#9ECBFF">&quot;review&quot;</span><span style="color:#E1E4E8">, review_node)</span></span>
+<span class="line"><span style="color:#E1E4E8">content_workflow.add_node(</span><span style="color:#9ECBFF">&quot;revision&quot;</span><span style="color:#E1E4E8">, revision_node)</span></span>
+<span class="line"><span style="color:#E1E4E8">content_workflow.add_node(</span><span style="color:#9ECBFF">&quot;finalize&quot;</span><span style="color:#E1E4E8">, finalize_node)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># フローの定義</span></span>
+<span class="line"><span style="color:#E1E4E8">content_workflow.set_entry_point(</span><span style="color:#9ECBFF">&quot;research&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">content_workflow.add_edge(</span><span style="color:#9ECBFF">&quot;research&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&quot;outline&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">content_workflow.add_edge(</span><span style="color:#9ECBFF">&quot;outline&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&quot;writing&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">content_workflow.add_edge(</span><span style="color:#9ECBFF">&quot;writing&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&quot;review&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 条件分岐: レビュー後の処理</span></span>
+<span class="line"><span style="color:#E1E4E8">content_workflow.add_conditional_edges(</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;review&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">    should_revise,</span></span>
+<span class="line"><span style="color:#E1E4E8">    {</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;revise&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;revision&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;finalize&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;finalize&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 修正後は再度レビュー</span></span>
+<span class="line"><span style="color:#E1E4E8">content_workflow.add_edge(</span><span style="color:#9ECBFF">&quot;revision&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&quot;review&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">content_workflow.add_edge(</span><span style="color:#9ECBFF">&quot;finalize&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">END</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># コンパイル</span></span>
+<span class="line"><span style="color:#E1E4E8">content_app </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> content_workflow.compile()</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 実行</span></span>
+<span class="line"><span style="color:#E1E4E8">result </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> content_app.invoke({</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;topic&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;AIエージェントの活用事例&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;research_data&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;outline&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;draft&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;final_content&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;feedback&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;iteration&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0</span></span>
+<span class="line"><span style="color:#E1E4E8">})</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#79B8FF">print</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">&quot;=== 最終記事 ===&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#79B8FF">print</span><span style="color:#E1E4E8">(result[</span><span style="color:#9ECBFF">&quot;final_content&quot;</span><span style="color:#E1E4E8">])</span></span></code></pre>
+<h2 id="エージェント間のコミュニケーション">エージェント間のコミュニケーション</h2>
+<h3 id="メッセージパッシング">メッセージパッシング</h3>
+<p>エージェント間で構造化されたメッセージを交換する方法です。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="python"><code><span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> pydantic </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> BaseModel</span></span>
+<span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> typing </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> Literal</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">class</span><span style="color:#B392F0"> Message</span><span style="color:#E1E4E8">(</span><span style="color:#B392F0">BaseModel</span><span style="color:#E1E4E8">):</span></span>
+<span class="line"><span style="color:#E1E4E8">    sender: </span><span style="color:#79B8FF">str</span></span>
+<span class="line"><span style="color:#E1E4E8">    receiver: </span><span style="color:#79B8FF">str</span></span>
+<span class="line"><span style="color:#E1E4E8">    message_type: Literal[</span><span style="color:#9ECBFF">&quot;request&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&quot;response&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&quot;notification&quot;</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#E1E4E8">    content: </span><span style="color:#79B8FF">dict</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">class</span><span style="color:#B392F0"> MessageBus</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;メッセージバスパターン&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#F97583">    def</span><span style="color:#79B8FF"> __init__</span><span style="color:#E1E4E8">(self):</span></span>
+<span class="line"><span style="color:#79B8FF">        self</span><span style="color:#E1E4E8">.messages </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> []</span></span>
+<span class="line"><span style="color:#79B8FF">        self</span><span style="color:#E1E4E8">.subscribers </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> {}</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    def</span><span style="color:#B392F0"> publish</span><span style="color:#E1E4E8">(self, message: Message):</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;&quot;&quot;メッセージを発行&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#79B8FF">        self</span><span style="color:#E1E4E8">.messages.append(message)</span></span>
+<span class="line"><span style="color:#E1E4E8">        </span></span>
+<span class="line"><span style="color:#6A737D">        # 購読者に通知</span></span>
+<span class="line"><span style="color:#F97583">        if</span><span style="color:#E1E4E8"> message.receiver </span><span style="color:#F97583">in</span><span style="color:#79B8FF"> self</span><span style="color:#E1E4E8">.subscribers:</span></span>
+<span class="line"><span style="color:#F97583">            for</span><span style="color:#E1E4E8"> callback </span><span style="color:#F97583">in</span><span style="color:#79B8FF"> self</span><span style="color:#E1E4E8">.subscribers[message.receiver]:</span></span>
+<span class="line"><span style="color:#E1E4E8">                callback(message)</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    def</span><span style="color:#B392F0"> subscribe</span><span style="color:#E1E4E8">(self, agent_name: </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">, callback):</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;&quot;&quot;エージェントがメッセージを購読&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#F97583">        if</span><span style="color:#E1E4E8"> agent_name </span><span style="color:#F97583">not</span><span style="color:#F97583"> in</span><span style="color:#79B8FF"> self</span><span style="color:#E1E4E8">.subscribers:</span></span>
+<span class="line"><span style="color:#79B8FF">            self</span><span style="color:#E1E4E8">.subscribers[agent_name] </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> []</span></span>
+<span class="line"><span style="color:#79B8FF">        self</span><span style="color:#E1E4E8">.subscribers[agent_name].append(callback)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 使用例</span></span>
+<span class="line"><span style="color:#E1E4E8">message_bus </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> MessageBus()</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> agent_a_handler</span><span style="color:#E1E4E8">(message: Message):</span></span>
+<span class="line"><span style="color:#79B8FF">    print</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">f</span><span style="color:#9ECBFF">&quot;Agent A received: </span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">message.content</span><span style="color:#79B8FF">}</span><span style="color:#9ECBFF">&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">message_bus.subscribe(</span><span style="color:#9ECBFF">&quot;agent_a&quot;</span><span style="color:#E1E4E8">, agent_a_handler)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># メッセージ送信</span></span>
+<span class="line"><span style="color:#E1E4E8">message_bus.publish(Message(</span></span>
+<span class="line"><span style="color:#FFAB70">    sender</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">&quot;agent_b&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">    receiver</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">&quot;agent_a&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">    message_type</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">&quot;request&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">    content</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">{</span><span style="color:#9ECBFF">&quot;action&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;process_data&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&quot;data&quot;</span><span style="color:#E1E4E8">: [</span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">2</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">3</span><span style="color:#E1E4E8">]}</span></span>
+<span class="line"><span style="color:#E1E4E8">))</span></span></code></pre>
+<h3 id="共有メモリー">共有メモリー</h3>
+<p>エージェント間で状態を共有する方法です。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="python"><code><span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> langchain.memory </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> ConversationBufferMemory</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">class</span><span style="color:#B392F0"> SharedMemory</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;共有メモリー&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#F97583">    def</span><span style="color:#79B8FF"> __init__</span><span style="color:#E1E4E8">(self):</span></span>
+<span class="line"><span style="color:#79B8FF">        self</span><span style="color:#E1E4E8">.memory </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> ConversationBufferMemory()</span></span>
+<span class="line"><span style="color:#79B8FF">        self</span><span style="color:#E1E4E8">.shared_data </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> {}</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    def</span><span style="color:#79B8FF"> set</span><span style="color:#E1E4E8">(self, key: </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">, value: </span><span style="color:#79B8FF">any</span><span style="color:#E1E4E8">):</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;&quot;&quot;データを保存&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#79B8FF">        self</span><span style="color:#E1E4E8">.shared_data[key] </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> value</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    def</span><span style="color:#B392F0"> get</span><span style="color:#E1E4E8">(self, key: </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">, default</span><span style="color:#F97583">=</span><span style="color:#79B8FF">None</span><span style="color:#E1E4E8">):</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;&quot;&quot;データを取得&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#79B8FF"> self</span><span style="color:#E1E4E8">.shared_data.get(key, default)</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    def</span><span style="color:#B392F0"> add_conversation</span><span style="color:#E1E4E8">(self, role: </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">, content: </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">):</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;&quot;&quot;会話履歴に追加&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#79B8FF">        self</span><span style="color:#E1E4E8">.memory.chat_memory.add_message(</span></span>
+<span class="line"><span style="color:#E1E4E8">            {</span><span style="color:#9ECBFF">&quot;role&quot;</span><span style="color:#E1E4E8">: role, </span><span style="color:#9ECBFF">&quot;content&quot;</span><span style="color:#E1E4E8">: content}</span></span>
+<span class="line"><span style="color:#E1E4E8">        )</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    def</span><span style="color:#B392F0"> get_conversation_history</span><span style="color:#E1E4E8">(self):</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;&quot;&quot;会話履歴を取得&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#79B8FF"> self</span><span style="color:#E1E4E8">.memory.load_memory_variables({})</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 使用例</span></span>
+<span class="line"><span style="color:#E1E4E8">shared_memory </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> SharedMemory()</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># エージェントAがデータを保存</span></span>
+<span class="line"><span style="color:#E1E4E8">shared_memory.set(</span><span style="color:#9ECBFF">&quot;research_results&quot;</span><span style="color:#E1E4E8">, {</span><span style="color:#9ECBFF">&quot;topic&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;AI&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&quot;findings&quot;</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">&quot;...&quot;</span><span style="color:#E1E4E8">]})</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># エージェントBがデータを読み取り</span></span>
+<span class="line"><span style="color:#E1E4E8">results </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> shared_memory.get(</span><span style="color:#9ECBFF">&quot;research_results&quot;</span><span style="color:#E1E4E8">)</span></span></code></pre>
+<h2 id="パフォーマンスと最適化">パフォーマンスと最適化</h2>
+<h3 id="並列実行の最適化">並列実行の最適化</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="python"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> asyncio</span></span>
+<span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> typing </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> List</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">async</span><span style="color:#F97583"> def</span><span style="color:#B392F0"> parallel_agent_execution</span><span style="color:#E1E4E8">(agents: List, input_data):</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;複数のエージェントを並列実行&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    tasks </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> [</span></span>
+<span class="line"><span style="color:#E1E4E8">        asyncio.create_task(agent.ainvoke(input_data))</span></span>
+<span class="line"><span style="color:#F97583">        for</span><span style="color:#E1E4E8"> agent </span><span style="color:#F97583">in</span><span style="color:#E1E4E8"> agents</span></span>
+<span class="line"><span style="color:#E1E4E8">    ]</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#E1E4E8">    results </span><span style="color:#F97583">=</span><span style="color:#F97583"> await</span><span style="color:#E1E4E8"> asyncio.gather(</span><span style="color:#F97583">*</span><span style="color:#E1E4E8">tasks)</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> results</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 使用例</span></span>
+<span class="line"><span style="color:#F97583">async</span><span style="color:#F97583"> def</span><span style="color:#B392F0"> main</span><span style="color:#E1E4E8">():</span></span>
+<span class="line"><span style="color:#E1E4E8">    agents </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> [market_analyst, competitor_analyst, tech_analyst]</span></span>
+<span class="line"><span style="color:#E1E4E8">    results </span><span style="color:#F97583">=</span><span style="color:#F97583"> await</span><span style="color:#E1E4E8"> parallel_agent_execution(</span></span>
+<span class="line"><span style="color:#E1E4E8">        agents,</span></span>
+<span class="line"><span style="color:#E1E4E8">        {</span><span style="color:#9ECBFF">&quot;input&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;市場分析を実行&quot;</span><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#E1E4E8">    )</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> results</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 実行</span></span>
+<span class="line"><span style="color:#E1E4E8">results </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> asyncio.run(main())</span></span></code></pre>
+<h3 id="キャッシング">キャッシング</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="python"><code><span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> functools </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> lru_cache</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> hashlib</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">class</span><span style="color:#B392F0"> CachedAgent</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#F97583">    def</span><span style="color:#79B8FF"> __init__</span><span style="color:#E1E4E8">(self, agent):</span></span>
+<span class="line"><span style="color:#79B8FF">        self</span><span style="color:#E1E4E8">.agent </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> agent</span></span>
+<span class="line"><span style="color:#79B8FF">        self</span><span style="color:#E1E4E8">.cache </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> {}</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    def</span><span style="color:#B392F0"> invoke</span><span style="color:#E1E4E8">(self, input_data: </span><span style="color:#79B8FF">dict</span><span style="color:#E1E4E8">):</span></span>
+<span class="line"><span style="color:#6A737D">        # 入力のハッシュを計算</span></span>
+<span class="line"><span style="color:#E1E4E8">        input_hash </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> hashlib.md5(</span></span>
+<span class="line"><span style="color:#79B8FF">            str</span><span style="color:#E1E4E8">(input_data).encode()</span></span>
+<span class="line"><span style="color:#E1E4E8">        ).hexdigest()</span></span>
+<span class="line"><span style="color:#E1E4E8">        </span></span>
+<span class="line"><span style="color:#6A737D">        # キャッシュにあれば返す</span></span>
+<span class="line"><span style="color:#F97583">        if</span><span style="color:#E1E4E8"> input_hash </span><span style="color:#F97583">in</span><span style="color:#79B8FF"> self</span><span style="color:#E1E4E8">.cache:</span></span>
+<span class="line"><span style="color:#79B8FF">            print</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">&quot;Cache hit!&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#F97583">            return</span><span style="color:#79B8FF"> self</span><span style="color:#E1E4E8">.cache[input_hash]</span></span>
+<span class="line"><span style="color:#E1E4E8">        </span></span>
+<span class="line"><span style="color:#6A737D">        # エージェントを実行</span></span>
+<span class="line"><span style="color:#E1E4E8">        result </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> self</span><span style="color:#E1E4E8">.agent.invoke(input_data)</span></span>
+<span class="line"><span style="color:#E1E4E8">        </span></span>
+<span class="line"><span style="color:#6A737D">        # キャッシュに保存</span></span>
+<span class="line"><span style="color:#79B8FF">        self</span><span style="color:#E1E4E8">.cache[input_hash] </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> result</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#E1E4E8"> result</span></span></code></pre>
+<h2 id="実運用での成果">実運用での成果</h2>
+<p>弊社のマルチエージェントシステム導入事例では、以下の成果を達成しました：</p>
+<ul>
+<li><strong>コンテンツ制作時間</strong>: 従来の <strong>1/3に短縮</strong></li>
+<li><strong>品質スコア</strong>: 人間によるレビューで <strong>85%が高評価</strong></li>
+<li><strong>コスト削減</strong>: API呼び出しコストを <strong>45%削減</strong>（並列実行とキャッシングにより）</li>
+<li><strong>稼働率</strong>: <strong>24時間365日の自動処理</strong>を実現</li>
+</ul>
+<h2 id="おわりに">おわりに</h2>
+<p>LangChainとLangGraphを使ったマルチエージェントシステムは、複雑な業務プロセスの自動化を実現する強力なツールです。</p>
+<p>本記事で紹介した設計パターンを組み合わせることで、様々なユースケースに対応できる柔軟なシステムを構築できます。</p>
+<p>マルチエージェントシステム導入の際は、以下のポイントを押さえることをお勧めします：</p>
+<ol>
+<li><strong>役割の明確化</strong>: 各エージェントの責務を明確に定義</li>
+<li><strong>適切なパターン選択</strong>: タスクの特性に応じた実行パターンの選択</li>
+<li><strong>エラーハンドリング</strong>: エージェント間の通信エラーへの対応</li>
+<li><strong>パフォーマンス最適化</strong>: 並列実行とキャッシングの活用</li>
+<li><strong>モニタリング</strong>: エージェントの動作状況を継続的に監視</li>
+</ol>
+<p>弊社では、これらの知見を活かして、お客様のビジネスに最適なマルチエージェントシステムの構築を支援しています。</p>
+<h2 id="参考リンク">参考リンク</h2>
+<ul>
+<li><a href="https://python.langchain.com/docs/get_started/introduction">LangChain Documentation</a></li>
+<li><a href="https://langchain-ai.github.io/langgraph/">LangGraph Documentation</a></li>
+<li><a href="https://blog.langchain.dev/langgraph-multi-agent-workflows/">Multi-Agent Systems with LangGraph</a></li>
+<li><a href="https://platform.openai.com/docs/guides/function-calling">OpenAI Function Calling</a></li>
+</ul> </div> <!-- Article Footer (Share & Tags) --> <footer class="mt-20 pt-10 border-t border-gray-100 dark:border-slate-800"> <div class="mb-12"> <div class="flex items-center space-x-4"> <span class="text-sm font-bold text-gray-500">Share:</span> <a href="https://twitter.com/intent/tweet?text=LangChain%E3%81%A8LangGraph%E3%81%A7%E5%AE%9F%E7%8F%BE%E3%81%99%E3%82%8B%E3%83%9E%E3%83%AB%E3%83%81%E3%82%A8%E3%83%BC%E3%82%B8%E3%82%A7%E3%83%B3%E3%83%88%E3%82%B7%E3%82%B9%E3%83%86%E3%83%A0&url=https%3A%2F%2Fblog.shineos.com%2Fpr-preview%2F13%2Fposts%2F2025-12-02-langchain-langgraph-multi-agent%2F" target="_blank" rel="noopener noreferrer" class="p-2 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors" aria-label="Share on X"> <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path></svg> </a> <a href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fblog.shineos.com%2Fpr-preview%2F13%2Fposts%2F2025-12-02-langchain-langgraph-multi-agent%2F" target="_blank" rel="noopener noreferrer" class="p-2 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors" aria-label="Share on LinkedIn"> <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M20.5 2h-17A1.5 1.5 0 002 3.5v17A1.5 1.5 0 003.5 22h17a1.5 1.5 0 001.5-1.5v-17A1.5 1.5 0 0020.5 2zM8 19H5v-9h3zM6.5 8.25A1.75 1.75 0 118.3 6.5a1.78 1.78 0 01-1.8 1.75zM19 19h-3v-4.74c0-1.42-.6-1.93-1.38-1.93A1.74 1.74 0 0013 14.19V19h-3v-9h2.9v1.3a3.11 3.11 0 012.7-1.4c1.55 0 3.36.86 3.36 3.66z"></path></svg> </a> </div> </div> </footer> </article> </main> <!-- Sidebar --> <aside class="w-full"> <div class="sticky top-24 space-y-6 w-full self-start"> <!-- Search Widget --> <div class="hidden md:block relative z-50 bg-white dark:bg-shineos-900 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-white/5"> <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-4">
+検索
+</h3> <div id="search" class="w-full relative"></div> <script>
+    window.addEventListener("DOMContentLoaded", (event) => {
+        new PagefindUI({
+            element: "#search",
+            showSubResults: true,
+            showImages: false,
+            translations: {
+                placeholder: "記事を検索...",
+                zero_results:
+                    "[SEARCH_TERM] に一致する記事が見つかりませんでした",
+            },
+        });
+    });
+</script> <link href="/pr-preview/13/pagefind/pagefind-ui.css" rel="stylesheet"> <script src="/pr-preview/13/pagefind/pagefind-ui.js"></script>  </div> <!-- Table of Contents --> <div class="hidden md:block bg-white dark:bg-shineos-900 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-white/5"> <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-4">
+目次
+</h3> <ul class="space-y-2" data-astro-cid-xvrfupwn> <li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#はじめに" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> はじめに </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#マルチエージェントシステムとは" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> マルチエージェントシステムとは？ </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#単一エージェント-vs-マルチエージェント" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 単一エージェント vs マルチエージェント </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#まとめ" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> まとめ </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#langchainとlanggraphの基礎" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> LangChainとLangGraphの基礎 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#langchainとは" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> LangChainとは </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#langgraphとは" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> LangGraphとは </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#マルチエージェントシステムの設計パターン" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> マルチエージェントシステムの設計パターン </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#パターン1-順次実行パターン" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> パターン1: 順次実行パターン </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#パターン2-並列実行パターン" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> パターン2: 並列実行パターン </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#パターン3-条件分岐パターン" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> パターン3: 条件分岐パターン </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#実践例-コンテンツ制作システム" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 実践例: コンテンツ制作システム </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#エージェント間のコミュニケーション" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> エージェント間のコミュニケーション </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#メッセージパッシング" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> メッセージパッシング </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#共有メモリー" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 共有メモリー </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#パフォーマンスと最適化" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> パフォーマンスと最適化 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#並列実行の最適化" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 並列実行の最適化 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#キャッシング" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> キャッシング </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#実運用での成果" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 実運用での成果 </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#おわりに" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> おわりに </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#参考リンク" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 参考リンク </a> </li> </ul>  </div> <!-- Categories Widget -->  <!-- Tags Widget --> <div class="bg-white dark:bg-shineos-900 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-white/5"> <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-4">
+Tags
+</h3> <div class="flex flex-wrap gap-2"> <a href="/pr-preview/13/tags/LLM" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"> LLM </a><a href="/pr-preview/13/tags/AIエージェント" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"> AIエージェント </a><a href="/pr-preview/13/tags/AI活用" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"> AI活用 </a><a href="/pr-preview/13/tags/Shineos" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"> Shineos </a><a href="/pr-preview/13/tags/Announcement" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"> Announcement </a> </div> </div> <!-- Related Posts --> <div class="bg-white dark:bg-shineos-900 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-white/5"> <h3 class="text-base font-bold text-gray-900 dark:text-white mb-4 relative inline-block">
+関連記事
+<span class="absolute -bottom-1 left-0 w-full h-0.5 bg-blue-600 rounded-full"></span> </h3> <div class="space-y-4"> <a href="/pr-preview/13/posts/2025-12-13-ai-agent-workflow-patterns" class="group flex gap-3 items-start bg-gray-50 dark:bg-shineos-800/50 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-shineos-800 transition-colors"> <div class="shrink-0 w-24 aspect-video rounded-md overflow-hidden bg-gray-200 dark:bg-gray-700"> <img src="/pr-preview/13/images/posts/2025/12/ai-agent-workflow-patterns/header.webp" alt="AIエージェントワークフローの設計パターン - 業務自動化を成功させる実践的アプローチ" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"> </div> <div class="flex flex-col min-w-0"> <div class="flex items-center gap-2 mb-1"> <span class="text-[10px] items-center px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 font-medium truncate max-w-[80px]"> AIエージェント </span> <span class="text-[10px] text-gray-400"> 2025/12/13 </span> </div> <h4 class="text-xs font-bold text-gray-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-cyan-400 transition-colors line-clamp-3 leading-relaxed"> AIエージェントワークフローの設計パターン - 業務自動化を成功させる実践的アプローチ </h4> </div> </a><a href="/pr-preview/13/posts/2025-12-13-prompt-engineering-best-practices" class="group flex gap-3 items-start bg-gray-50 dark:bg-shineos-800/50 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-shineos-800 transition-colors"> <div class="shrink-0 w-24 aspect-video rounded-md overflow-hidden bg-gray-200 dark:bg-gray-700"> <img src="/pr-preview/13/images/posts/2025/12/prompt-engineering-best-practices/header.webp" alt="プロンプトエンジニアリングのベストプラクティス - LLMの性能を最大化する技法" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"> </div> <div class="flex flex-col min-w-0"> <div class="flex items-center gap-2 mb-1"> <span class="text-[10px] items-center px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 font-medium truncate max-w-[80px]"> プロンプトエンジニアリング </span> <span class="text-[10px] text-gray-400"> 2025/12/13 </span> </div> <h4 class="text-xs font-bold text-gray-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-cyan-400 transition-colors line-clamp-3 leading-relaxed"> プロンプトエンジニアリングのベストプラクティス - LLMの性能を最大化する技法 </h4> </div> </a><a href="/pr-preview/13/posts/2025-12-03-rag-implementation-guide" class="group flex gap-3 items-start bg-gray-50 dark:bg-shineos-800/50 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-shineos-800 transition-colors"> <div class="shrink-0 w-24 aspect-video rounded-md overflow-hidden bg-gray-200 dark:bg-gray-700"> <img src="/pr-preview/13/images/posts/2025/12/rag-implementation-guide/header.webp" alt="RAG（検索拡張生成）実装ガイド - 基礎から本番運用まで" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"> </div> <div class="flex flex-col min-w-0"> <div class="flex items-center gap-2 mb-1"> <span class="text-[10px] items-center px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 font-medium truncate max-w-[80px]"> RAG </span> <span class="text-[10px] text-gray-400"> 2025/12/3 </span> </div> <h4 class="text-xs font-bold text-gray-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-cyan-400 transition-colors line-clamp-3 leading-relaxed"> RAG（検索拡張生成）実装ガイド - 基礎から本番運用まで </h4> </div> </a> </div> </div> </div> </aside> </div>  <div id="mobile-toc-container" class="md:hidden"> <button id="mobile-toc-btn" class="fixed bottom-6 right-6 z-50 w-14 h-14 bg-white dark:bg-shineos-800 rounded-full shadow-lg border border-gray-200 dark:border-white/10 flex items-center justify-center text-gray-700 dark:text-white hover:scale-105 transition-transform"> <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg> </button> <div id="mobile-toc-overlay" class="fixed inset-0 z-40 bg-white/95 dark:bg-shineos-950/95 backdrop-blur-sm transform transition-transform duration-300 translate-y-full flex flex-col pt-20 px-6 pb-6 overflow-y-auto"> <button id="close-toc-btn" class="absolute top-6 right-6 p-2 text-gray-500 hover:text-gray-900 dark:hover:text-white"> <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg> </button> <h2 class="text-xl font-bold mb-6 text-gray-900 dark:text-white">
+目次
+</h2> <ul class="space-y-2" data-astro-cid-xvrfupwn> <li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#はじめに" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> はじめに </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#マルチエージェントシステムとは" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> マルチエージェントシステムとは？ </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#単一エージェント-vs-マルチエージェント" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 単一エージェント vs マルチエージェント </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#まとめ" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> まとめ </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#langchainとlanggraphの基礎" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> LangChainとLangGraphの基礎 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#langchainとは" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> LangChainとは </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#langgraphとは" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> LangGraphとは </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#マルチエージェントシステムの設計パターン" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> マルチエージェントシステムの設計パターン </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#パターン1-順次実行パターン" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> パターン1: 順次実行パターン </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#パターン2-並列実行パターン" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> パターン2: 並列実行パターン </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#パターン3-条件分岐パターン" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> パターン3: 条件分岐パターン </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#実践例-コンテンツ制作システム" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 実践例: コンテンツ制作システム </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#エージェント間のコミュニケーション" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> エージェント間のコミュニケーション </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#メッセージパッシング" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> メッセージパッシング </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#共有メモリー" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 共有メモリー </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#パフォーマンスと最適化" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> パフォーマンスと最適化 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#並列実行の最適化" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 並列実行の最適化 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#キャッシング" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> キャッシング </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#実運用での成果" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 実運用での成果 </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#おわりに" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> おわりに </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#参考リンク" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 参考リンク </a> </li> </ul>  </div> </div> <script type="module">function r(){document.querySelectorAll("pre").forEach(t=>{const o=document.createElement("div");o.className="absolute top-2 right-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100 z-10",getComputedStyle(t).position==="static"&&(t.style.position="relative"),t.classList.add("group");const e=document.createElement("button");e.className="w-10 h-10 flex items-center justify-center rounded-md bg-gray-700/80 hover:bg-gray-600 text-white shadow-sm backdrop-blur-sm transition-colors border border-white/10",e.innerHTML=`
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+        </svg>
+      `,e.title="Copy code",e.setAttribute("aria-label","ソースコードをコピー"),e.addEventListener("click",async()=>{const n=t.querySelector("code"),a=n?n.innerText:t.innerText;try{await navigator.clipboard.writeText(a),e.innerHTML=`
+              <svg class="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+            `,setTimeout(()=>{e.innerHTML=`
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                  </svg>
+                `},2e3)}catch(i){console.error("Failed to copy code:",i)}}),o.appendChild(e),t.appendChild(o)})}r();document.addEventListener("astro:page-load",r);</script> <script type="module">const c=document.getElementById("mobile-toc-btn"),l=document.getElementById("close-toc-btn"),t=document.getElementById("mobile-toc-overlay"),n=t?.querySelectorAll("a");function e(){t.classList.toggle("translate-y-full"),document.body.classList.toggle("overflow-hidden")}c?.addEventListener("click",e);l?.addEventListener("click",e);n?.forEach(o=>{o.addEventListener("click",e)});</script>  </main> <footer class="border-t border-gray-200 dark:border-white/5 bg-white dark:bg-shineos-900/50 backdrop-blur-lg mt-20 transition-colors duration-300"> <div class="max-w-5xl mx-auto px-6 py-12 flex flex-col md:flex-row justify-between items-center gap-6"> <div class="text-center md:text-left"> <div class="text-xl font-bold text-gray-900 dark:text-white mb-2">
+Shineos Inc.
+</div> <p class="text-gray-500 dark:text-gray-500 text-sm">
+開発チームによる技術ブログ。<br> モダンなWeb開発、AIエージェント、DXの実践知見を共有します。
+</p> </div> <div class="flex items-center space-x-6 text-sm"> <a href="https://x.com/shineos_corp" target="_blank" class="text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-white transition-colors">X (Twitter)</a> <a href="https://github.com/Shineos" target="_blank" class="text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-white transition-colors">GitHub</a> <a href="/pr-preview/13/privacy" class="text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-white transition-colors">Privacy Policy</a> </div> </div> <div class="border-t border-gray-100 dark:border-white/5 py-6 text-center text-gray-400 dark:text-gray-600 text-xs">
+&copy; 2025 Shineos Inc. All rights reserved.
+</div> </footer> </body></html> 
