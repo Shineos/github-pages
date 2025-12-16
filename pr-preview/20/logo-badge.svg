@@ -1,9 +1,0 @@
-<svg width="150" height="30" viewBox="0 0 300 60" xmlns="http://www.w3.org/2000/svg">
-  <!-- Pill shape background -->
-  <rect x="2" y="2" width="296" height="56" rx="28" fill="#E0F2FE" stroke="#2563EB" stroke-width="4"/>
-  
-  <!-- Text -->
-  <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial, sans-serif" font-weight="bold" font-size="20" fill="#2563EB" letter-spacing="1">
-    SHINEOS INC. TECH BLOG
-  </text>
-</svg>
