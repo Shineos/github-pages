@@ -1,0 +1,748 @@
+<!DOCTYPE html><html lang="ja" class="scroll-smooth scroll-pt-24"> <head><meta charset="utf-8"><link rel="icon" type="image/png" href="/favicon.png"><meta name="viewport" content="width=device-width"><meta name="generator" content="Astro v5.16.5"><title>エンタープライズSaaSに必須な「堅牢なテナント分離」の設計パターンとセキュリティ実装 | Shineos Inc. Tech Blog</title><meta name="description" content="マルチテナントSaaSでデータ漏洩を防ぐための、実践的なテナント分離戦略とセキュリティ実装パターンを具体的なコード例とともに解説します。"><meta property="og:title" content="エンタープライズSaaSに必須な「堅牢なテナント分離」の設計パターンとセキュリティ実装"><meta property="og:description" content="マルチテナントSaaSでデータ漏洩を防ぐための、実践的なテナント分離戦略とセキュリティ実装パターンを具体的なコード例とともに解説します。"><meta property="og:image" content="https://blog.shineos.com/images/posts/2025/12/enterprise-saas-tenant-isolation/header.webp"><meta property="og:type" content="article"><meta property="og:url" content="https://blog.shineos.com/posts/2025-12-11-enterprise-saas-tenant-isolation/"><meta name="twitter:card" content="summary_large_image"><script>
+      // Init theme on load
+      if (
+        localStorage.getItem("color-theme") === "dark" ||
+        (!("color-theme" in localStorage) &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches)
+      ) {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+    </script><script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Shineos Inc. Tech Blog","url":"https://blog.shineos.com/"}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","@id":"https://shineos.com/#organization","name":"株式会社シャイオス","alternateName":["シャイオス","Shineos Inc.","Shineos"],"url":"https://shineos.com/","logo":"https://storage.googleapis.com/studio-design-asset-files/projects/nBW2wzvyOv/s-444x108_webp_55d10f20-64d9-4940-ad41-e1a674aed0ad.webp","description":"新たな価値を生み出し、世界に輝き〈Shine〉と革新〈Neos〉を届ける。","address":{"@type":"PostalAddress","streetAddress":"栄町5番1号 横浜クリエーションスクエア 14階","addressLocality":"横浜市神奈川区","addressRegion":"神奈川県","postalCode":"221-0052","addressCountry":"JP"},"contactPoint":{"@type":"ContactPoint","contactType":"customer support","email":"info@shineos.com","url":"https://shineos.com/contact"},"sameAs":["https://twitter.com/shineos_corp","https://www.facebook.com/shineos.corp/","https://www.linkedin.com/company/shineos-corp","https://prtimes.jp/main/html/searchrlp/company_id/95807"]}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":"エンタープライズSaaSに必須な「堅牢なテナント分離」の設計パターンとセキュリティ実装","author":{"@type":"Organization","name":"株式会社シャイオス","url":"https://shineos.com"},"datePublished":"2025-12-11","image":"https://blog.shineos.com/images/posts/2025/12/enterprise-saas-tenant-isolation/header.webp","articleSection":["SaaS","マルチテナント","セキュリティ","データベース設計","テナント分離"],"articleBody":"## テナント分離とは？\n\nエンタープライズSaaSにおいて、 **テナント分離（Tenant Isolation）** は最も重要なセキュリティ要件の一つです。複数の顧客（テナント）が同じアプリケーションを利用する環境で、あるテナントのデータが別のテナントから閲覧・変更されることを防ぐ仕組みです。\n\n2024年には大手SaaSサービスでもテナント分離の不備によるデータ漏洩事故が複数報告されており、エンタープライズ顧客の信頼を失う致命的な問題となっています。\n\n本記事では、堅牢なテナント分離を実現するための設計パターンと、実装時に注意すべきセキュリティポイントを解説します。\n\n## まとめ\n\n| 分離方式 | セキュリティ | コスト | 拡張性 | 適用シーン |\n|---------|-------------|--------|--------|-----------|\n| **データベース分離** | 🔴 最高 | 🔴 高 | 🟡 中 | エンタープライズ顧客向け |\n| **スキーマ分離** | 🟡 高 | 🟡 中 | 🟢 高 | 中規模顧客向け |\n| **行レベル分離** | 🟡 中 | 🟢 低 | 🟢 高 | スタートアップ・小規模顧客向け |\n| **ハイブリッド** | 🟢 柔軟 | 🟡 中 | 🟢 高 | 顧客規模に応じて使い分け |\n\n## なぜテナント分離が重要なのか？\n\n### データ漏洩のリスク\n\nテナント分離が不十分な場合、以下のようなリスクが発生します：\n\n1. **SQLインジェクション**: 悪意あるクエリで他テナントのデータにアクセス\n2. **APIの脆弱性**: テナントIDの検証漏れによる不正アクセス\n3. **キャッシュの汚染**: 共有キャッシュから別テナントのデータが漏洩\n4. **バグによる誤表示**: コードの不具合で別テナントのデータが表示される\n\n### エンタープライズ要件\n\nエンタープライズ顧客と契約する際、以下の要件が求められます：\n\n- **SOC 2 Type II 認証**: テナント分離の監査証跡\n- **GDPR対応**: データの物理的分離の証明\n- **SLA保証**: 他テナントの影響を受けない性能保証\n\n## テナント分離の3つの設計パターン\n\n![テナント分離パターン比較](/images/posts/2025/12/enterprise-saas-tenant-isolation/tenant-isolation-patterns.webp)\n\n### パターン1：データベース分離（Database per Tenant）\n\n各テナントに専用のデータベースを割り当てる方式です。\n\n#### メリット\n\n- **最高レベルのセキュリティ**: 物理的に完全分離\n- **パフォーマンス保証**: 他テナントの影響を受けない\n- **データ移行が容易**: テナント単位でのバックアップ・復元\n\n#### デメリット\n\n- **運用コストが高い**: データベース数に比例してコスト増\n- **スキーマ変更が複雑**: すべてのDBに変更を適用する必要\n\n#### 実装例\n\n```typescript\n// データベース分離の実装\nimport { PrismaClient } from '@prisma/client';\n\n// テナントごとにデータベース接続を管理\nclass TenantDatabaseManager {\n  private connections: Map<string, PrismaClient> = new Map();\n  \n  /**\n   * テナント専用のDB接続を取得\n   */\n  async getConnection(tenantId: string): Promise<PrismaClient> {\n    // 既存の接続があれば再利用\n    if (this.connections.has(tenantId)) {\n      return this.connections.get(tenantId)!;\n    }\n    \n    // テナント用のデータベースURLを構築\n    const databaseUrl = this.buildDatabaseUrl(tenantId);\n    \n    // 新しい接続を作成\n    const prisma = new PrismaClient({\n      datasources: {\n        db: {\n          url: databaseUrl\n        }\n      }\n    });\n    \n    this.connections.set(tenantId, prisma);\n    return prisma;\n  }\n  \n  private buildDatabaseUrl(tenantId: string): string {\n    const baseUrl = process.env.DATABASE_BASE_URL;\n    // テナントIDに基づいたDB名を生成\n    return `${baseUrl}/tenant_${tenantId}`;\n  }\n  \n  /**\n   * 接続プールのクリーンアップ\n   */\n  async cleanup(): Promise<void> {\n    const disconnectPromises = Array.from(this.connections.values())\n      .map(client => client.$disconnect());\n    \n    await Promise.all(disconnectPromises);\n    this.connections.clear();\n  }\n}\n\n// 使用例\nconst dbManager = new TenantDatabaseManager();\n\nasync function getUserData(tenantId: string, userId: string) {\n  const db = await dbManager.getConnection(tenantId);\n  \n  // このクエリはテナント専用DBに対して実行される\n  const user = await db.user.findUnique({\n    where: { id: userId }\n  });\n  \n  return user;\n}\n```\n\n### パターン2：スキーマ分離（Schema per Tenant）\n\n1つのデータベース内で、テナントごとに専用スキーマを作成する方式です。\n\n#### メリット\n\n- **コストと分離のバランス**: DB数を抑えつつ論理的に分離\n- **管理の効率化**: 1つのDBインスタンスで複数テナントを管理\n\n#### デメリット\n\n- **パフォーマンスへの影響**: リソースを共有するため他テナントの影響あり\n- **スキーマ管理の複雑さ**: マイグレーション時の注意が必要\n\n#### 実装例（PostgreSQL）\n\n```typescript\n// スキーマ分離の実装\nimport { Pool } from 'pg';\n\nclass SchemaBasedTenantManager {\n  private pool: Pool;\n  \n  constructor() {\n    this.pool = new Pool({\n      connectionString: process.env.DATABASE_URL,\n      max: 20 // 接続プールサイズ\n    });\n  }\n  \n  /**\n   * テナント専用スキーマでクエリを実行\n   */\n  async executeInTenantSchema<T>(\n    tenantId: string,\n    query: string,\n    params: any[] = []\n  ): Promise<T> {\n    const client = await this.pool.connect();\n    \n    try {\n      // スキーマをテナント専用に設定\n      await client.query(`SET search_path TO tenant_${tenantId}, public`);\n      \n      // クエリを実行\n      const result = await client.query(query, params);\n      return result.rows as T;\n    } finally {\n      // スキーマをリセット\n      await client.query('RESET search_path');\n      client.release();\n    }\n  }\n  \n  /**\n   * 新しいテナント用のスキーマを作成\n   */\n  async createTenantSchema(tenantId: string): Promise<void> {\n    const client = await this.pool.connect();\n    \n    try {\n      const schemaName = `tenant_${tenantId}`;\n      \n      // スキーマを作成\n      await client.query(`CREATE SCHEMA IF NOT EXISTS ${schemaName}`);\n      \n      // テーブルを作成（例）\n      await client.query(`\n        CREATE TABLE IF NOT EXISTS ${schemaName}.users (\n          id UUID PRIMARY KEY,\n          email VARCHAR(255) NOT NULL UNIQUE,\n          name VARCHAR(255) NOT NULL,\n          created_at TIMESTAMP DEFAULT NOW()\n        )\n      `);\n      \n      console.log(`✅ Schema created for tenant: ${tenantId}`);\n    } catch (error) {\n      console.error(`❌ Failed to create schema for tenant ${tenantId}:`, error);\n      throw error;\n    } finally {\n      client.release();\n    }\n  }\n}\n\n// 使用例\nconst schemaManager = new SchemaBasedTenantManager();\n\nasync function getTenantUsers(tenantId: string) {\n  const users = await schemaManager.executeInTenantSchema(\n    tenantId,\n    'SELECT * FROM users WHERE active = $1',\n    [true]\n  );\n  \n  return users;\n}\n```\n\n### パターン3：行レベル分離（Row-Level Isolation）\n\nすべてのテーブルに `tenant_id` カラムを追加し、クエリ時にフィルタリングする方式です。\n\n#### メリット\n\n- **コストが最も低い**: 1つのDBで全テナントを管理\n- **スケーラビリティ**: 新しいテナント追加が容易\n- **クロステナント分析**: 全体のデータ分析が可能\n\n#### デメリット\n\n- **セキュリティリスク**: クエリミスでデータ漏洩の可能性\n- **パフォーマンス**: テーブルサイズが大きくなるとインデックス効率低下\n\n#### 実装例（Row Level Security）\n\n```typescript\n// 行レベル分離の実装（Prisma + PostgreSQL RLS）\n\n// 1. Prismaスキーマ定義\n/*\nmodel User {\n  id        String   @id @default(uuid())\n  tenantId  String   @map(\"tenant_id\") // 必須フィールド\n  email     String   @unique\n  name      String\n  createdAt DateTime @default(now()) @map(\"created_at\")\n  \n  @@index([tenantId])\n  @@map(\"users\")\n}\n*/\n\n// 2. PostgreSQLのRow Level Security設定\nasync function setupRowLevelSecurity(db: any) {\n  await db.$executeRaw`\n    -- RLSを有効化\n    ALTER TABLE users ENABLE ROW LEVEL SECURITY;\n    \n    -- テナントIDに基づくポリシーを作成\n    CREATE POLICY tenant_isolation ON users\n      USING (tenant_id = current_setting('app.current_tenant')::text);\n    \n    -- アプリケーションロールを作成\n    CREATE ROLE app_user;\n    GRANT SELECT, INSERT, UPDATE, DELETE ON users TO app_user;\n  `;\n}\n\n// 3. ミドルウェアでテナントIDを設定\nclass TenantContextMiddleware {\n  async setTenantContext(\n    tenantId: string,\n    prisma: PrismaClient\n  ): Promise<void> {\n    // PostgreSQLのセッション変数にテナントIDを設定\n    await prisma.$executeRaw`\n      SET LOCAL app.current_tenant = ${tenantId}\n    `;\n  }\n}\n\n// 4. テナント対応のリポジトリ\nclass TenantAwareRepository {\n  constructor(\n    private prisma: PrismaClient,\n    private tenantId: string\n  ) {}\n  \n  /**\n   * ユーザー作成（テナントID自動付与）\n   */\n  async createUser(data: { email: string; name: string }) {\n    // テナントIDを必ず含める\n    return await this.prisma.user.create({\n      data: {\n        ...data,\n        tenantId: this.tenantId\n      }\n    });\n  }\n  \n  /**\n   * ユーザー取得（テナントID自動フィルタ）\n   */\n  async getUsers() {\n    // WHERE句に必ずtenantIdを含める\n    return await this.prisma.user.findMany({\n      where: {\n        tenantId: this.tenantId\n      }\n    });\n  }\n  \n  /**\n   * ユーザー更新（テナント検証）\n   */\n  async updateUser(userId: string, data: { name: string }) {\n    // 更新前にテナント所属を検証\n    const user = await this.prisma.user.findFirst({\n      where: {\n        id: userId,\n        tenantId: this.tenantId // ✅ 必須の検証\n      }\n    });\n    \n    if (!user) {\n      throw new Error('User not found or access denied');\n    }\n    \n    return await this.prisma.user.update({\n      where: { id: userId },\n      data\n    });\n  }\n}\n\n// 5. API実装例\nimport { Request, Response } from 'express';\n\nasync function getUsersHandler(req: Request, res: Response) {\n  const tenantId = req.headers['x-tenant-id'] as string;\n  \n  if (!tenantId) {\n    return res.status(400).json({ error: 'Tenant ID required' });\n  }\n  \n  const repository = new TenantAwareRepository(prisma, tenantId);\n  const users = await repository.getUsers();\n  \n  res.json({ users });\n}\n```\n\n## セキュリティ実装のベストプラクティス\n\n### 1. テナントIDの検証を徹底する\n\n```typescript\n// ❌ 危険な実装\nasync function getOrder(orderId: string) {\n  return await db.order.findUnique({\n    where: { id: orderId }\n  });\n}\n\n// ✅ 安全な実装\nasync function getOrder(tenantId: string, orderId: string) {\n  const order = await db.order.findFirst({\n    where: {\n      id: orderId,\n      tenantId: tenantId // 必須の検証\n    }\n  });\n  \n  if (!order) {\n    throw new Error('Order not found or access denied');\n  }\n  \n  return order;\n}\n```\n\n### 2. ミドルウェアでテナントコンテキストを管理\n\n```typescript\n// Express ミドルウェア例\nimport { Request, Response, NextFunction } from 'express';\n\ninterface TenantRequest extends Request {\n  tenantId?: string;\n}\n\nasync function tenantMiddleware(\n  req: TenantRequest,\n  res: Response,\n  next: NextFunction\n) {\n  // JWTトークンからテナントIDを抽出\n  const token = req.headers.authorization?.replace('Bearer ', '');\n  \n  if (!token) {\n    return res.status(401).json({ error: 'Unauthorized' });\n  }\n  \n  try {\n    const decoded = verifyToken(token);\n    req.tenantId = decoded.tenantId;\n    \n    // テナントの存在確認\n    const tenant = await db.tenant.findUnique({\n      where: { id: req.tenantId }\n    });\n    \n    if (!tenant || !tenant.active) {\n      return res.status(403).json({ error: 'Tenant not found or inactive' });\n    }\n    \n    next();\n  } catch (error) {\n    return res.status(401).json({ error: 'Invalid token' });\n  }\n}\n\n// 使用例\napp.use('/api', tenantMiddleware);\n\napp.get('/api/users', async (req: TenantRequest, res) => {\n  const users = await getUsersForTenant(req.tenantId!);\n  res.json({ users });\n});\n```\n\n### 3. データベースレベルの制約を追加\n\n```sql\n-- テナントIDにNOT NULL制約を追加\nALTER TABLE users \n  ALTER COLUMN tenant_id SET NOT NULL;\n\n-- 複合ユニーク制約でテナント内の一意性を保証\nALTER TABLE users\n  ADD CONSTRAINT unique_email_per_tenant \n  UNIQUE (tenant_id, email);\n\n-- テナントIDのインデックスを作成（パフォーマンス向上）\nCREATE INDEX idx_users_tenant_id ON users(tenant_id);\n\n-- 外部キー制約でテナントの存在を保証\nALTER TABLE users\n  ADD CONSTRAINT fk_users_tenant\n  FOREIGN KEY (tenant_id) REFERENCES tenants(id)\n  ON DELETE CASCADE;\n```\n\n## 実際のビジネスシーンでの活用例\n\n### ケース1：エンタープライズ顧客の要求に対応\n\n**状況**: 大手企業から「データを物理的に分離してほしい」という要求\n\n**解決策**: ハイブリッドアプローチを採用\n\n```typescript\n// テナント設定に基づいて分離方式を切り替え\nclass AdaptiveTenantManager {\n  async getRepository(tenantId: string) {\n    const tenant = await this.getTenantConfig(tenantId);\n    \n    switch (tenant.isolationLevel) {\n      case 'DATABASE':\n        // エンタープライズ顧客は専用DB\n        return new DatabaseIsolatedRepository(tenantId);\n      \n      case 'SCHEMA':\n        // 中規模顧客は専用スキーマ\n        return new SchemaIsolatedRepository(tenantId);\n      \n      case 'ROW':\n        // 小規模顧客は行レベル分離\n        return new RowLevelRepository(tenantId);\n      \n      default:\n        throw new Error(`Unknown isolation level: ${tenant.isolationLevel}`);\n    }\n  }\n  \n  private async getTenantConfig(tenantId: string) {\n    return await db.tenant.findUnique({\n      where: { id: tenantId },\n      select: {\n        id: true,\n        isolationLevel: true,\n        databaseUrl: true\n      }\n    });\n  }\n}\n```\n\n### ケース2：監査ログでテナント間アクセスを検出\n\n```typescript\n// 監査ログの実装\nclass AuditLogger {\n  async logDataAccess(params: {\n    tenantId: string;\n    userId: string;\n    action: string;\n    resourceType: string;\n    resourceId: string;\n    success: boolean;\n  }) {\n    await db.auditLog.create({\n      data: {\n        ...params,\n        timestamp: new Date(),\n        ipAddress: this.getClientIp()\n      }\n    });\n    \n    // 異常なアクセスパターンを検出\n    await this.detectAnomalies(params);\n  }\n  \n  private async detectAnomalies(params: any) {\n    // 過去5分間に同一ユーザーが複数テナントにアクセスしていないか確認\n    const recentAccesses = await db.auditLog.findMany({\n      where: {\n        userId: params.userId,\n        timestamp: {\n          gte: new Date(Date.now() - 5 * 60 * 1000)\n        }\n      },\n      distinct: ['tenantId']\n    });\n    \n    if (recentAccesses.length > 1) {\n      console.warn('🚨 Potential cross-tenant access detected:', {\n        userId: params.userId,\n        tenants: recentAccesses.map(a => a.tenantId)\n      });\n      \n      // アラートを送信\n      await this.sendSecurityAlert(params.userId, recentAccesses);\n    }\n  }\n}\n```\n\n### ケース3：テナント分離のテスト自動化\n\n```typescript\n// テナント分離のE2Eテスト\ndescribe('Tenant Isolation Tests', () => {\n  let tenant1: Tenant;\n  let tenant2: Tenant;\n  \n  beforeEach(async () => {\n    tenant1 = await createTenant({ name: 'Tenant 1' });\n    tenant2 = await createTenant({ name: 'Tenant 2' });\n  });\n  \n  it('should not allow cross-tenant data access', async () => {\n    // Tenant 1にユーザーを作成\n    const user1 = await createUser({\n      tenantId: tenant1.id,\n      email: 'user1@tenant1.com'\n    });\n    \n    // Tenant 2のコンテキストでTenant 1のユーザーにアクセス試行\n    const repository = new TenantAwareRepository(prisma, tenant2.id);\n    \n    const user = await repository.getUser(user1.id);\n    \n    // アクセスできないことを確認\n    expect(user).toBeNull();\n  });\n  \n  it('should enforce tenant_id in all queries', async () => {\n    // クエリログを監視\n    const queryLog: string[] = [];\n    prisma.$use(async (params, next) => {\n      queryLog.push(JSON.stringify(params));\n      return next(params);\n    });\n    \n    // ユーザー取得\n    const repository = new TenantAwareRepository(prisma, tenant1.id);\n    await repository.getUsers();\n    \n    // すべてのクエリにtenant_idフィルタが含まれることを確認\n    const allQueriesHaveTenantId = queryLog.every(log => \n      log.includes('tenant_id') || log.includes('tenantId')\n    );\n    \n    expect(allQueriesHaveTenantId).toBe(true);\n  });\n});\n```\n\n## よくある質問\n\n### どの分離方式を選べばよいですか？\n\n以下の基準で選択してください：\n\n- **年商1億円以上のエンタープライズ顧客が多い**: データベース分離\n- **中小企業が中心で、一部大手顧客がいる**: ハイブリッド（スキーマ + DB分離）\n- **スタートアップ向けで顧客数が多い**: 行レベル分離\n\n### パフォーマンスへの影響はありますか？\n\nはい、分離方式によって影響があります：\n\n- **データベース分離**: 接続プールの管理が複雑になる\n- **スキーマ分離**: スキーマ切り替えのオーバーヘッド（数ms）\n- **行レベル分離**: インデックスサイズが大きくなる\n\n### 既存システムから移行できますか？\n\n可能です。段階的な移行を推奨します：\n\n1. **Phase 1**: 行レベル分離を導入\n2. **Phase 2**: 大口顧客をスキーマ分離に移行\n3. **Phase 3**: エンタープライズ顧客をDB分離に移行\n\n---\n\n## おわりに\n\n堅牢なテナント分離は、エンタープライズSaaSの信頼性を支える基盤です。セキュリティ要件とコストのバランスを考慮し、適切な分離方式を選択することが重要です。\n\n重要なのは、 **テナントIDの検証を徹底すること** と、 **監査ログで異常を検出できる仕組みを構築すること** です。一度のデータ漏洩で失う信頼は、取り戻すことが困難です。\n\n私たちShineosでは、マルチテナントSaaSのアーキテクチャ設計や、セキュリティ監査対応の支援を行っています。テナント分離の実装やSOC 2認証取得など、お気軽にご相談ください。\n\n## 参考リンク\n\n- [1] [Multi-Tenant SaaS Architecture Patterns - AWS](https://aws.amazon.com/jp/builders-flash/202410/multi-tenant-saas-pattern/)\n- [2] [PostgreSQL Row Level Security - PostgreSQL Documentation](https://www.postgresql.org/docs/current/ddl-rowsecurity.html)\n- [3] [OWASP Multi-Tenancy Cheat Sheet](https://github.com/OWASP/CheatSheetSeries/issues/1928)\n- [4] [Building Multi-Tenant SaaS Applications - Microsoft Azure](https://learn.microsoft.com/en-us/azure/architecture/guide/multitenant/overview)","url":"https://blog.shineos.com/posts/2025-12-11-enterprise-saas-tenant-isolation/","publisher":{"@type":"Organization","name":"株式会社シャイオス","url":"https://shineos.com","logo":{"@type":"ImageObject","url":"https://shineos.com/logo.png"}}}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"ホーム","item":"https://blog.shineos.com/"},{"@type":"ListItem","position":2,"name":"記事一覧","item":"https://blog.shineos.com/archives/1"},{"@type":"ListItem","position":3,"name":"エンタープライズSaaSに必須な「堅牢なテナント分離」の設計パターンとセキュリティ実装","item":"https://blog.shineos.com/posts/2025-12-11-enterprise-saas-tenant-isolation/"}]}</script><!-- Google tag (gtag.js) --><script async src="https://www.googletagmanager.com/gtag/js?id=G-L9J411DHVF"></script><script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag("js", new Date());
+
+      gtag("config", "G-L9J411DHVF");
+    </script><link rel="stylesheet" href="/_astro/about.alGNjP7J.css">
+<style>.pagefind-ui__search-input{background-color:transparent!important;border:1px solid #e5e7eb!important;color:#111827!important;border-radius:.5rem!important;font-size:.875rem!important;text-align:left!important}.dark .pagefind-ui__search-input{border-color:#ffffff1a!important;color:#fff!important}.pagefind-ui__drawer{position:absolute!important;left:0!important;right:0!important;width:100%!important;z-index:9999!important;background-color:#fffffffa!important;backdrop-filter:blur(12px);border:1px solid #e5e7eb;border-radius:.5rem;margin-top:.5rem;max-height:50vh!important;overflow-y:scroll!important;overscroll-behavior:contain;box-shadow:0 20px 25px -5px #0000001a,0 10px 10px -5px #0000000a;scrollbar-width:thin;scrollbar-color:#94a3b8 #f1f5f9;-webkit-overflow-scrolling:touch}.dark .pagefind-ui__drawer{background-color:#0f172afa!important;border-color:#ffffff1a;box-shadow:0 20px 25px -5px #00000080;scrollbar-color:#64748b #1e293b}.pagefind-ui__drawer::-webkit-scrollbar{width:10px!important;display:block!important}.pagefind-ui__drawer::-webkit-scrollbar-track{background:#f1f5f9!important;border-radius:0 .5rem .5rem 0}.dark .pagefind-ui__drawer::-webkit-scrollbar-track{background:#1e293b!important}.pagefind-ui__drawer::-webkit-scrollbar-thumb{background-color:#94a3b8!important;border-radius:20px;border:2px solid #f1f5f9!important}.dark .pagefind-ui__drawer::-webkit-scrollbar-thumb{background-color:#64748b!important;border-color:#1e293b!important}.pagefind-ui__drawer::-webkit-scrollbar-thumb:hover{background-color:#64748b!important;cursor:pointer}.dark .pagefind-ui__drawer::-webkit-scrollbar-thumb:hover{background-color:#94a3b8!important}.pagefind-ui__result{padding:0 1rem!important;font-size:.9rem!important}.pagefind-ui__result-link{color:#2563eb!important}.dark .pagefind-ui__result-link{color:#3b82f6!important}.pagefind-ui__result-excerpt{color:#4b5563!important}.dark .pagefind-ui__result-excerpt{color:#9ca3af!important}.pagefind-ui__message{color:#6b7280!important;padding-left:1rem!important}.dark .pagefind-ui__message{color:#9ca3af!important}.dark .pagefind-ui__search-clear{background-color:transparent!important;color:#e2e8f0!important}
+</style>
+<link rel="stylesheet" href="/_astro/_slug_.DUrD4dIZ.css"></head> <body class="bg-gray-50 text-gray-900 dark:bg-shineos-950 dark:text-slate-200 min-h-screen flex flex-col font-sans antialiased selection:bg-blue-100 selection:text-blue-900 dark:selection:bg-shineos-brand/30 dark:selection:text-white overflow-x-hidden transition-colors duration-300"> <!-- Background Decor (Dark Mode Only) --> <div class="fixed inset-0 z-0 pointer-events-none hidden dark:block"> <div class="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-shineos-brand/20 blur-[120px] rounded-full mix-blend-screen opacity-40"></div> <div class="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-shineos-cyan/20 blur-[120px] rounded-full mix-blend-screen opacity-40"></div> </div> <!-- Background Decor (Light Mode) --> <div class="fixed inset-0 z-0 pointer-events-none dark:hidden"> <div class="absolute top-0 right-0 w-[50%] h-[50%] bg-blue-100/40 blur-[100px] rounded-full opacity-60"></div> </div> <header id="main-header" class="fixed w-full top-0 z-50 transition-all duration-300 border-b border-gray-200 dark:border-white/5 bg-white/80 dark:bg-shineos-950/70 backdrop-blur-xl supports-[backdrop-filter]:bg-white/60 dark:supports-[backdrop-filter]:bg-shineos-950/60" data-astro-cid-3ef6ksr2> <div class="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between" data-astro-cid-3ef6ksr2> <a href="/" class="group flex items-center gap-2 relative z-50" data-astro-cid-3ef6ksr2> <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 dark:from-shineos-brand dark:to-shineos-cyan flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-blue-500/20 dark:shadow-shineos-brand/20 transition-all" data-astro-cid-3ef6ksr2>
+S
+</div> <span class="text-lg font-bold text-gray-900 dark:text-white tracking-tight" data-astro-cid-3ef6ksr2>Shineos Tech Blog</span> </a> <div class="flex items-center gap-4" data-astro-cid-3ef6ksr2> <nav class="hidden md:block" data-astro-cid-3ef6ksr2> <ul class="flex space-x-8 text-sm font-medium text-gray-600 dark:text-gray-400" data-astro-cid-3ef6ksr2> <li data-astro-cid-3ef6ksr2> <a href="/" class="hover:text-blue-600 dark:hover:text-white transition-colors" data-astro-cid-3ef6ksr2>ホーム</a> </li> <li data-astro-cid-3ef6ksr2> <a href="/archives/1" class="hover:text-blue-600 dark:hover:text-white transition-colors" data-astro-cid-3ef6ksr2>記事一覧</a> </li> <li data-astro-cid-3ef6ksr2> <a href="/about" class="hover:text-blue-600 dark:hover:text-white transition-colors" data-astro-cid-3ef6ksr2>私たちについて</a> </li> <li data-astro-cid-3ef6ksr2> <a href="https://shineos.com" target="_blank" rel="noopener noreferrer" class="hover:text-blue-600 dark:hover:text-white transition-colors flex items-center gap-1" data-astro-cid-3ef6ksr2>
+コーポレート
+<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" data-astro-cid-3ef6ksr2><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" data-astro-cid-3ef6ksr2></path></svg> </a> </li> </ul> </nav> <div class="relative z-50 flex items-center gap-4" data-astro-cid-3ef6ksr2> <button id="theme-toggle" type="button" class="relative w-14 h-8 bg-gray-200 dark:bg-gray-700 rounded-full focus:outline-none focus:ring-4 focus:ring-gray-200 dark:focus:ring-gray-700 transition-colors duration-300 ease-in-out" aria-label="Toggle Theme"> <span id="theme-toggle-thumb" class="absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transform transition-transform duration-300 ease-in-out flex items-center justify-center"> <!-- Sun Icon (Light Mode) --> <svg id="theme-toggle-light-icon" class="w-4 h-4 text-orange-400" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"> <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" fill-rule="evenodd" clip-rule="evenodd"></path> </svg> <!-- Moon Icon (Dark Mode) --> <svg id="theme-toggle-dark-icon" class="hidden w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"> <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path> </svg> </span> </button> <script>
+    const themeToggleBtn = document.getElementById("theme-toggle");
+    const themeToggleThumb = document.getElementById("theme-toggle-thumb");
+    const themeToggleDarkIcon = document.getElementById(
+        "theme-toggle-dark-icon",
+    );
+    const themeToggleLightIcon = document.getElementById(
+        "theme-toggle-light-icon",
+    );
+
+    // Function to update UI based on theme
+    const updateThemeUI = (isDark) => {
+        if (isDark) {
+            themeToggleThumb.classList.add("translate-x-6");
+            themeToggleLightIcon.classList.add("hidden");
+            themeToggleDarkIcon.classList.remove("hidden");
+        } else {
+            themeToggleThumb.classList.remove("translate-x-6");
+            themeToggleLightIcon.classList.remove("hidden");
+            themeToggleDarkIcon.classList.add("hidden");
+        }
+    };
+
+    // Initial check
+    if (
+        localStorage.getItem("color-theme") === "dark" ||
+        (!("color-theme" in localStorage) &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches)
+    ) {
+        updateThemeUI(true);
+    } else {
+        updateThemeUI(false);
+    }
+
+    // Event Listener
+    themeToggleBtn.addEventListener("click", function () {
+        const isDark = document.documentElement.classList.contains("dark");
+
+        // Toggle theme
+        if (isDark) {
+            document.documentElement.classList.remove("dark");
+            localStorage.setItem("color-theme", "light");
+            updateThemeUI(false);
+        } else {
+            document.documentElement.classList.add("dark");
+            localStorage.setItem("color-theme", "dark");
+            updateThemeUI(true);
+        }
+    });
+</script> <!-- Mobile Menu Button --> <button id="mobile-menu-btn" class="md:hidden p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition-colors" aria-label="Menu" data-astro-cid-3ef6ksr2> <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" data-astro-cid-3ef6ksr2> <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" data-astro-cid-3ef6ksr2></path> </svg> </button> </div> </div> </div> <!-- Mobile Menu Overlay --> <div id="mobile-menu" class="fixed inset-0 bg-white dark:bg-shineos-950 z-40 opacity-0 invisible transition-all duration-300 md:hidden flex flex-col pt-24 px-6" data-astro-cid-3ef6ksr2> <nav class="flex flex-col space-y-6 text-lg font-medium text-gray-900 dark:text-white" data-astro-cid-3ef6ksr2> <a href="/" class="mobile-link py-2 border-b border-gray-100 dark:border-white/5" data-astro-cid-3ef6ksr2>ホーム</a> <a href="/archives/1" class="mobile-link py-2 border-b border-gray-100 dark:border-white/5" data-astro-cid-3ef6ksr2>記事一覧</a> <a href="/about" class="mobile-link py-2 border-b border-gray-100 dark:border-white/5" data-astro-cid-3ef6ksr2>私たちについて</a> <a href="https://shineos.com" target="_blank" rel="noopener noreferrer" class="mobile-link py-2 border-b border-gray-100 dark:border-white/5 flex items-center justify-between" data-astro-cid-3ef6ksr2>
+コーポレート
+<svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" data-astro-cid-3ef6ksr2><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" data-astro-cid-3ef6ksr2></path></svg> </a> </nav> </div> </header>  <script type="module">const o=document.getElementById("mobile-menu-btn"),e=document.getElementById("mobile-menu"),i=document.querySelectorAll(".mobile-link");let s=!1;o&&e&&(o.addEventListener("click",()=>{s=!s,s?(e.classList.remove("opacity-0","invisible"),e.classList.add("opacity-100","visible"),document.body.classList.add("menu-open"),o.innerHTML='<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>',document.body.style.overflow="hidden"):(e.classList.remove("opacity-100","visible"),e.classList.add("opacity-0","invisible"),document.body.classList.remove("menu-open"),o.innerHTML='<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>',document.body.style.overflow="")}),i.forEach(n=>{n.addEventListener("click",()=>{s=!1,e.classList.remove("opacity-100","visible"),e.classList.add("opacity-0","invisible"),document.body.classList.remove("menu-open"),o.innerHTML='<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>',document.body.style.overflow=""})}));</script> <div class="h-16" data-astro-cid-3ef6ksr2></div> <!-- Spacer for fixed header --> <main class="flex-grow max-w-7xl mx-auto px-6 py-12 w-full relative z-10">   <div class="max-w-[1600px] mx-auto px-4 lg:px-0 mb-4"> <nav class="flex text-sm text-gray-500 dark:text-gray-400 mb-6 overflow-x-auto whitespace-nowrap pb-2" aria-label="Breadcrumb"> <ol class="inline-flex items-center space-x-1 md:space-x-3"> <li class="inline-flex items-center"> <a href="/" class="inline-flex items-center hover:text-blue-600 dark:hover:text-white transition-colors"> <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path></svg>
+ホーム
+</a> </li> <li> <div class="flex items-center"> <svg class="w-6 h-6 text-gray-400" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"> <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path> </svg> <a href="/archives/1" class="ml-1 hover:text-blue-600 dark:hover:text-white md:ml-2 transition-colors"> 記事一覧 </a> </div> </li><li> <div class="flex items-center"> <svg class="w-6 h-6 text-gray-400" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"> <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path> </svg> <span class="ml-1 text-gray-700 dark:text-gray-200 font-medium md:ml-2"> エンタープライズSaaSに必須な「堅牢なテナント分離」の設計パターンとセキュリティ実装 </span> </div> </li> </ol> </nav> </div> <div class="grid md:grid-cols-[1fr_300px] gap-8 max-w-[1600px] mx-auto px-4 lg:px-0"> <!-- Main Content Column --> <main class="min-w-0"> <article class="bg-white dark:bg-shineos-900 rounded-3xl p-6 lg:p-10 shadow-sm border border-gray-100 dark:border-white/5"> <!-- Article Header --> <header class="mb-12 text-center md:text-left"> <!-- Header Image (Top of Article) --> <div class="mb-8 rounded-2xl overflow-hidden shadow-md aspect-video w-full bg-gray-100 dark:bg-shineos-800"> <img src="/images/posts/2025/12/enterprise-saas-tenant-isolation/header.webp" alt="エンタープライズSaaSに必須な「堅牢なテナント分離」の設計パターンとセキュリティ実装" class="w-full h-full object-cover"> </div> <h1 class="text-3xl md:text-4xl font-extrabold mb-6 text-gray-900 dark:text-white leading-tight tracking-tight" data-pagefind-weight="10"> エンタープライズSaaSに必須な「堅牢なテナント分離」の設計パターンとセキュリティ実装 </h1> <div class="flex flex-wrap items-center gap-4 text-gray-500 dark:text-gray-400 text-sm mb-6">  <time datetime="2025-12-11T00:00:00.000Z" class="flex items-center gap-1 font-mono"> <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg> 2025.12.11 </time> <span class="text-gray-300 dark:text-gray-600">|</span> <span class="flex items-center gap-1"> Shineos Dev Team </span> </div> <div class="flex flex-wrap gap-2 mb-6"> <a href="/tags/SaaS" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs font-bold rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors">
+#SaaS </a><a href="/tags/マルチテナント" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs font-bold rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors">
+#マルチテナント </a><a href="/tags/セキュリティ" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs font-bold rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors">
+#セキュリティ </a><a href="/tags/データベース設計" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs font-bold rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors">
+#データベース設計 </a><a href="/tags/テナント分離" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs font-bold rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors">
+#テナント分離 </a> </div> <div> <div class="flex items-center space-x-4"> <span class="text-sm font-bold text-gray-500">Share:</span> <a href="https://twitter.com/intent/tweet?text=%E3%82%A8%E3%83%B3%E3%82%BF%E3%83%BC%E3%83%97%E3%83%A9%E3%82%A4%E3%82%BASaaS%E3%81%AB%E5%BF%85%E9%A0%88%E3%81%AA%E3%80%8C%E5%A0%85%E7%89%A2%E3%81%AA%E3%83%86%E3%83%8A%E3%83%B3%E3%83%88%E5%88%86%E9%9B%A2%E3%80%8D%E3%81%AE%E8%A8%AD%E8%A8%88%E3%83%91%E3%82%BF%E3%83%BC%E3%83%B3%E3%81%A8%E3%82%BB%E3%82%AD%E3%83%A5%E3%83%AA%E3%83%86%E3%82%A3%E5%AE%9F%E8%A3%85&url=https%3A%2F%2Fblog.shineos.com%2Fposts%2F2025-12-11-enterprise-saas-tenant-isolation%2F" target="_blank" rel="noopener noreferrer" class="p-2 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors" aria-label="Share on X"> <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path></svg> </a> <a href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fblog.shineos.com%2Fposts%2F2025-12-11-enterprise-saas-tenant-isolation%2F" target="_blank" rel="noopener noreferrer" class="p-2 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors" aria-label="Share on LinkedIn"> <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M20.5 2h-17A1.5 1.5 0 002 3.5v17A1.5 1.5 0 003.5 22h17a1.5 1.5 0 001.5-1.5v-17A1.5 1.5 0 0020.5 2zM8 19H5v-9h3zM6.5 8.25A1.75 1.75 0 118.3 6.5a1.78 1.78 0 01-1.8 1.75zM19 19h-3v-4.74c0-1.42-.6-1.93-1.38-1.93A1.74 1.74 0 0013 14.19V19h-3v-9h2.9v1.3a3.11 3.11 0 012.7-1.4c1.55 0 3.36.86 3.36 3.66z"></path></svg> </a> </div> </div> </header> <!-- Article Content --> <div class="prose prose-slate dark:prose-invert max-w-none
+                prose-h2:text-2xl prose-h2:font-bold prose-h2:mt-12 prose-h2:mb-6 prose-h2:pb-2 prose-h2:border-b prose-h2:border-gray-200 dark:prose-h2:border-slate-700
+                prose-h3:text-xl prose-h3:font-bold prose-h3:mt-8 prose-h3:mb-4
+                prose-p:leading-8 prose-p:text-slate-700 dark:prose-p:text-slate-200
+                prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline
+                prose-img:rounded-xl prose-img:shadow-md
+                custom-prose" data-pagefind-body> <h2 id="テナント分離とは">テナント分離とは？</h2>
+<p>エンタープライズSaaSにおいて、 <strong>テナント分離（Tenant Isolation）</strong> は最も重要なセキュリティ要件の一つです。複数の顧客（テナント）が同じアプリケーションを利用する環境で、あるテナントのデータが別のテナントから閲覧・変更されることを防ぐ仕組みです。</p>
+<p>2024年には大手SaaSサービスでもテナント分離の不備によるデータ漏洩事故が複数報告されており、エンタープライズ顧客の信頼を失う致命的な問題となっています。</p>
+<p>本記事では、堅牢なテナント分離を実現するための設計パターンと、実装時に注意すべきセキュリティポイントを解説します。</p>
+<h2 id="まとめ">まとめ</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>分離方式</th><th>セキュリティ</th><th>コスト</th><th>拡張性</th><th>適用シーン</th></tr></thead><tbody><tr><td><strong>データベース分離</strong></td><td>🔴 最高</td><td>🔴 高</td><td>🟡 中</td><td>エンタープライズ顧客向け</td></tr><tr><td><strong>スキーマ分離</strong></td><td>🟡 高</td><td>🟡 中</td><td>🟢 高</td><td>中規模顧客向け</td></tr><tr><td><strong>行レベル分離</strong></td><td>🟡 中</td><td>🟢 低</td><td>🟢 高</td><td>スタートアップ・小規模顧客向け</td></tr><tr><td><strong>ハイブリッド</strong></td><td>🟢 柔軟</td><td>🟡 中</td><td>🟢 高</td><td>顧客規模に応じて使い分け</td></tr></tbody></table>
+<h2 id="なぜテナント分離が重要なのか">なぜテナント分離が重要なのか？</h2>
+<h3 id="データ漏洩のリスク">データ漏洩のリスク</h3>
+<p>テナント分離が不十分な場合、以下のようなリスクが発生します：</p>
+<ol>
+<li><strong>SQLインジェクション</strong>: 悪意あるクエリで他テナントのデータにアクセス</li>
+<li><strong>APIの脆弱性</strong>: テナントIDの検証漏れによる不正アクセス</li>
+<li><strong>キャッシュの汚染</strong>: 共有キャッシュから別テナントのデータが漏洩</li>
+<li><strong>バグによる誤表示</strong>: コードの不具合で別テナントのデータが表示される</li>
+</ol>
+<h3 id="エンタープライズ要件">エンタープライズ要件</h3>
+<p>エンタープライズ顧客と契約する際、以下の要件が求められます：</p>
+<ul>
+<li><strong>SOC 2 Type II 認証</strong>: テナント分離の監査証跡</li>
+<li><strong>GDPR対応</strong>: データの物理的分離の証明</li>
+<li><strong>SLA保証</strong>: 他テナントの影響を受けない性能保証</li>
+</ul>
+<h2 id="テナント分離の3つの設計パターン">テナント分離の3つの設計パターン</h2>
+<p><img src="/images/posts/2025/12/enterprise-saas-tenant-isolation/tenant-isolation-patterns.webp" alt="テナント分離パターン比較"/></p>
+<h3 id="パターン1データベース分離database-per-tenant">パターン1：データベース分離（Database per Tenant）</h3>
+<p>各テナントに専用のデータベースを割り当てる方式です。</p>
+<h4 id="メリット">メリット</h4>
+<ul>
+<li><strong>最高レベルのセキュリティ</strong>: 物理的に完全分離</li>
+<li><strong>パフォーマンス保証</strong>: 他テナントの影響を受けない</li>
+<li><strong>データ移行が容易</strong>: テナント単位でのバックアップ・復元</li>
+</ul>
+<h4 id="デメリット">デメリット</h4>
+<ul>
+<li><strong>運用コストが高い</strong>: データベース数に比例してコスト増</li>
+<li><strong>スキーマ変更が複雑</strong>: すべてのDBに変更を適用する必要</li>
+</ul>
+<h4 id="実装例">実装例</h4>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="typescript"><code><span class="line"><span style="color:#6A737D">// データベース分離の実装</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { PrismaClient } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> &#39;@prisma/client&#39;</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">// テナントごとにデータベース接続を管理</span></span>
+<span class="line"><span style="color:#F97583">class</span><span style="color:#B392F0"> TenantDatabaseManager</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">  private</span><span style="color:#FFAB70"> connections</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Map</span><span style="color:#E1E4E8">&lt;</span><span style="color:#79B8FF">string</span><span style="color:#E1E4E8">, </span><span style="color:#B392F0">PrismaClient</span><span style="color:#E1E4E8">&gt; </span><span style="color:#F97583">=</span><span style="color:#F97583"> new</span><span style="color:#B392F0"> Map</span><span style="color:#E1E4E8">();</span></span>
+<span class="line"><span style="color:#E1E4E8">  </span></span>
+<span class="line"><span style="color:#6A737D">  /**</span></span>
+<span class="line"><span style="color:#6A737D">   * テナント専用のDB接続を取得</span></span>
+<span class="line"><span style="color:#6A737D">   */</span></span>
+<span class="line"><span style="color:#F97583">  async</span><span style="color:#B392F0"> getConnection</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">tenantId</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">)</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Promise</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">PrismaClient</span><span style="color:#E1E4E8">&gt; {</span></span>
+<span class="line"><span style="color:#6A737D">    // 既存の接続があれば再利用</span></span>
+<span class="line"><span style="color:#F97583">    if</span><span style="color:#E1E4E8"> (</span><span style="color:#79B8FF">this</span><span style="color:#E1E4E8">.connections.</span><span style="color:#B392F0">has</span><span style="color:#E1E4E8">(tenantId)) {</span></span>
+<span class="line"><span style="color:#F97583">      return</span><span style="color:#79B8FF"> this</span><span style="color:#E1E4E8">.connections.</span><span style="color:#B392F0">get</span><span style="color:#E1E4E8">(tenantId)</span><span style="color:#F97583">!</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#6A737D">    // テナント用のデータベースURLを構築</span></span>
+<span class="line"><span style="color:#F97583">    const</span><span style="color:#79B8FF"> databaseUrl</span><span style="color:#F97583"> =</span><span style="color:#79B8FF"> this</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">buildDatabaseUrl</span><span style="color:#E1E4E8">(tenantId);</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#6A737D">    // 新しい接続を作成</span></span>
+<span class="line"><span style="color:#F97583">    const</span><span style="color:#79B8FF"> prisma</span><span style="color:#F97583"> =</span><span style="color:#F97583"> new</span><span style="color:#B392F0"> PrismaClient</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">      datasources: {</span></span>
+<span class="line"><span style="color:#E1E4E8">        db: {</span></span>
+<span class="line"><span style="color:#E1E4E8">          url: databaseUrl</span></span>
+<span class="line"><span style="color:#E1E4E8">        }</span></span>
+<span class="line"><span style="color:#E1E4E8">      }</span></span>
+<span class="line"><span style="color:#E1E4E8">    });</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#79B8FF">    this</span><span style="color:#E1E4E8">.connections.</span><span style="color:#B392F0">set</span><span style="color:#E1E4E8">(tenantId, prisma);</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> prisma;</span></span>
+<span class="line"><span style="color:#E1E4E8">  }</span></span>
+<span class="line"><span style="color:#E1E4E8">  </span></span>
+<span class="line"><span style="color:#F97583">  private</span><span style="color:#B392F0"> buildDatabaseUrl</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">tenantId</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">)</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">    const</span><span style="color:#79B8FF"> baseUrl</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> process.env.</span><span style="color:#79B8FF">DATABASE_BASE_URL</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#6A737D">    // テナントIDに基づいたDB名を生成</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#9ECBFF"> `${</span><span style="color:#E1E4E8">baseUrl</span><span style="color:#9ECBFF">}/tenant_${</span><span style="color:#E1E4E8">tenantId</span><span style="color:#9ECBFF">}`</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">  }</span></span>
+<span class="line"><span style="color:#E1E4E8">  </span></span>
+<span class="line"><span style="color:#6A737D">  /**</span></span>
+<span class="line"><span style="color:#6A737D">   * 接続プールのクリーンアップ</span></span>
+<span class="line"><span style="color:#6A737D">   */</span></span>
+<span class="line"><span style="color:#F97583">  async</span><span style="color:#B392F0"> cleanup</span><span style="color:#E1E4E8">()</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Promise</span><span style="color:#E1E4E8">&lt;</span><span style="color:#79B8FF">void</span><span style="color:#E1E4E8">&gt; {</span></span>
+<span class="line"><span style="color:#F97583">    const</span><span style="color:#79B8FF"> disconnectPromises</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> Array.</span><span style="color:#B392F0">from</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">this</span><span style="color:#E1E4E8">.connections.</span><span style="color:#B392F0">values</span><span style="color:#E1E4E8">())</span></span>
+<span class="line"><span style="color:#E1E4E8">      .</span><span style="color:#B392F0">map</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">client</span><span style="color:#F97583"> =&gt;</span><span style="color:#E1E4E8"> client.</span><span style="color:#B392F0">$disconnect</span><span style="color:#E1E4E8">());</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    await</span><span style="color:#79B8FF"> Promise</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">all</span><span style="color:#E1E4E8">(disconnectPromises);</span></span>
+<span class="line"><span style="color:#79B8FF">    this</span><span style="color:#E1E4E8">.connections.</span><span style="color:#B392F0">clear</span><span style="color:#E1E4E8">();</span></span>
+<span class="line"><span style="color:#E1E4E8">  }</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">// 使用例</span></span>
+<span class="line"><span style="color:#F97583">const</span><span style="color:#79B8FF"> dbManager</span><span style="color:#F97583"> =</span><span style="color:#F97583"> new</span><span style="color:#B392F0"> TenantDatabaseManager</span><span style="color:#E1E4E8">();</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">async</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> getUserData</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">tenantId</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">userId</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> db</span><span style="color:#F97583"> =</span><span style="color:#F97583"> await</span><span style="color:#E1E4E8"> dbManager.</span><span style="color:#B392F0">getConnection</span><span style="color:#E1E4E8">(tenantId);</span></span>
+<span class="line"><span style="color:#E1E4E8">  </span></span>
+<span class="line"><span style="color:#6A737D">  // このクエリはテナント専用DBに対して実行される</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> user</span><span style="color:#F97583"> =</span><span style="color:#F97583"> await</span><span style="color:#E1E4E8"> db.user.</span><span style="color:#B392F0">findUnique</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">    where: { id: userId }</span></span>
+<span class="line"><span style="color:#E1E4E8">  });</span></span>
+<span class="line"><span style="color:#E1E4E8">  </span></span>
+<span class="line"><span style="color:#F97583">  return</span><span style="color:#E1E4E8"> user;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<h3 id="パターン2スキーマ分離schema-per-tenant">パターン2：スキーマ分離（Schema per Tenant）</h3>
+<p>1つのデータベース内で、テナントごとに専用スキーマを作成する方式です。</p>
+<h4 id="メリット-1">メリット</h4>
+<ul>
+<li><strong>コストと分離のバランス</strong>: DB数を抑えつつ論理的に分離</li>
+<li><strong>管理の効率化</strong>: 1つのDBインスタンスで複数テナントを管理</li>
+</ul>
+<h4 id="デメリット-1">デメリット</h4>
+<ul>
+<li><strong>パフォーマンスへの影響</strong>: リソースを共有するため他テナントの影響あり</li>
+<li><strong>スキーマ管理の複雑さ</strong>: マイグレーション時の注意が必要</li>
+</ul>
+<h4 id="実装例postgresql">実装例（PostgreSQL）</h4>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="typescript"><code><span class="line"><span style="color:#6A737D">// スキーマ分離の実装</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { Pool } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> &#39;pg&#39;</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">class</span><span style="color:#B392F0"> SchemaBasedTenantManager</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">  private</span><span style="color:#FFAB70"> pool</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Pool</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">  </span></span>
+<span class="line"><span style="color:#F97583">  constructor</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#79B8FF">    this</span><span style="color:#E1E4E8">.pool </span><span style="color:#F97583">=</span><span style="color:#F97583"> new</span><span style="color:#B392F0"> Pool</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">      connectionString: process.env.</span><span style="color:#79B8FF">DATABASE_URL</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">      max: </span><span style="color:#79B8FF">20</span><span style="color:#6A737D"> // 接続プールサイズ</span></span>
+<span class="line"><span style="color:#E1E4E8">    });</span></span>
+<span class="line"><span style="color:#E1E4E8">  }</span></span>
+<span class="line"><span style="color:#E1E4E8">  </span></span>
+<span class="line"><span style="color:#6A737D">  /**</span></span>
+<span class="line"><span style="color:#6A737D">   * テナント専用スキーマでクエリを実行</span></span>
+<span class="line"><span style="color:#6A737D">   */</span></span>
+<span class="line"><span style="color:#F97583">  async</span><span style="color:#B392F0"> executeInTenantSchema</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">T</span><span style="color:#E1E4E8">&gt;(</span></span>
+<span class="line"><span style="color:#FFAB70">    tenantId</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">    query</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">    params</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> any</span><span style="color:#E1E4E8">[] </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> []</span></span>
+<span class="line"><span style="color:#E1E4E8">  )</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Promise</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">T</span><span style="color:#E1E4E8">&gt; {</span></span>
+<span class="line"><span style="color:#F97583">    const</span><span style="color:#79B8FF"> client</span><span style="color:#F97583"> =</span><span style="color:#F97583"> await</span><span style="color:#79B8FF"> this</span><span style="color:#E1E4E8">.pool.</span><span style="color:#B392F0">connect</span><span style="color:#E1E4E8">();</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    try</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#6A737D">      // スキーマをテナント専用に設定</span></span>
+<span class="line"><span style="color:#F97583">      await</span><span style="color:#E1E4E8"> client.</span><span style="color:#B392F0">query</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">`SET search_path TO tenant_${</span><span style="color:#E1E4E8">tenantId</span><span style="color:#9ECBFF">}, public`</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">      </span></span>
+<span class="line"><span style="color:#6A737D">      // クエリを実行</span></span>
+<span class="line"><span style="color:#F97583">      const</span><span style="color:#79B8FF"> result</span><span style="color:#F97583"> =</span><span style="color:#F97583"> await</span><span style="color:#E1E4E8"> client.</span><span style="color:#B392F0">query</span><span style="color:#E1E4E8">(query, params);</span></span>
+<span class="line"><span style="color:#F97583">      return</span><span style="color:#E1E4E8"> result.rows </span><span style="color:#F97583">as</span><span style="color:#B392F0"> T</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">    } </span><span style="color:#F97583">finally</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#6A737D">      // スキーマをリセット</span></span>
+<span class="line"><span style="color:#F97583">      await</span><span style="color:#E1E4E8"> client.</span><span style="color:#B392F0">query</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">&#39;RESET search_path&#39;</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">      client.</span><span style="color:#B392F0">release</span><span style="color:#E1E4E8">();</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">  }</span></span>
+<span class="line"><span style="color:#E1E4E8">  </span></span>
+<span class="line"><span style="color:#6A737D">  /**</span></span>
+<span class="line"><span style="color:#6A737D">   * 新しいテナント用のスキーマを作成</span></span>
+<span class="line"><span style="color:#6A737D">   */</span></span>
+<span class="line"><span style="color:#F97583">  async</span><span style="color:#B392F0"> createTenantSchema</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">tenantId</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">)</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Promise</span><span style="color:#E1E4E8">&lt;</span><span style="color:#79B8FF">void</span><span style="color:#E1E4E8">&gt; {</span></span>
+<span class="line"><span style="color:#F97583">    const</span><span style="color:#79B8FF"> client</span><span style="color:#F97583"> =</span><span style="color:#F97583"> await</span><span style="color:#79B8FF"> this</span><span style="color:#E1E4E8">.pool.</span><span style="color:#B392F0">connect</span><span style="color:#E1E4E8">();</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    try</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">      const</span><span style="color:#79B8FF"> schemaName</span><span style="color:#F97583"> =</span><span style="color:#9ECBFF"> `tenant_${</span><span style="color:#E1E4E8">tenantId</span><span style="color:#9ECBFF">}`</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">      </span></span>
+<span class="line"><span style="color:#6A737D">      // スキーマを作成</span></span>
+<span class="line"><span style="color:#F97583">      await</span><span style="color:#E1E4E8"> client.</span><span style="color:#B392F0">query</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">`CREATE SCHEMA IF NOT EXISTS ${</span><span style="color:#E1E4E8">schemaName</span><span style="color:#9ECBFF">}`</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">      </span></span>
+<span class="line"><span style="color:#6A737D">      // テーブルを作成（例）</span></span>
+<span class="line"><span style="color:#F97583">      await</span><span style="color:#E1E4E8"> client.</span><span style="color:#B392F0">query</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">`</span></span>
+<span class="line"><span style="color:#9ECBFF">        CREATE TABLE IF NOT EXISTS ${</span><span style="color:#E1E4E8">schemaName</span><span style="color:#9ECBFF">}.users (</span></span>
+<span class="line"><span style="color:#9ECBFF">          id UUID PRIMARY KEY,</span></span>
+<span class="line"><span style="color:#9ECBFF">          email VARCHAR(255) NOT NULL UNIQUE,</span></span>
+<span class="line"><span style="color:#9ECBFF">          name VARCHAR(255) NOT NULL,</span></span>
+<span class="line"><span style="color:#9ECBFF">          created_at TIMESTAMP DEFAULT NOW()</span></span>
+<span class="line"><span style="color:#9ECBFF">        )</span></span>
+<span class="line"><span style="color:#9ECBFF">      `</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">      </span></span>
+<span class="line"><span style="color:#E1E4E8">      console.</span><span style="color:#B392F0">log</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">`✅ Schema created for tenant: ${</span><span style="color:#E1E4E8">tenantId</span><span style="color:#9ECBFF">}`</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">    } </span><span style="color:#F97583">catch</span><span style="color:#E1E4E8"> (error) {</span></span>
+<span class="line"><span style="color:#E1E4E8">      console.</span><span style="color:#B392F0">error</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">`❌ Failed to create schema for tenant ${</span><span style="color:#E1E4E8">tenantId</span><span style="color:#9ECBFF">}:`</span><span style="color:#E1E4E8">, error);</span></span>
+<span class="line"><span style="color:#F97583">      throw</span><span style="color:#E1E4E8"> error;</span></span>
+<span class="line"><span style="color:#E1E4E8">    } </span><span style="color:#F97583">finally</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">      client.</span><span style="color:#B392F0">release</span><span style="color:#E1E4E8">();</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">  }</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">// 使用例</span></span>
+<span class="line"><span style="color:#F97583">const</span><span style="color:#79B8FF"> schemaManager</span><span style="color:#F97583"> =</span><span style="color:#F97583"> new</span><span style="color:#B392F0"> SchemaBasedTenantManager</span><span style="color:#E1E4E8">();</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">async</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> getTenantUsers</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">tenantId</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> users</span><span style="color:#F97583"> =</span><span style="color:#F97583"> await</span><span style="color:#E1E4E8"> schemaManager.</span><span style="color:#B392F0">executeInTenantSchema</span><span style="color:#E1E4E8">(</span></span>
+<span class="line"><span style="color:#E1E4E8">    tenantId,</span></span>
+<span class="line"><span style="color:#9ECBFF">    &#39;SELECT * FROM users WHERE active = $1&#39;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">    [</span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#E1E4E8">  );</span></span>
+<span class="line"><span style="color:#E1E4E8">  </span></span>
+<span class="line"><span style="color:#F97583">  return</span><span style="color:#E1E4E8"> users;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<h3 id="パターン3行レベル分離row-level-isolation">パターン3：行レベル分離（Row-Level Isolation）</h3>
+<p>すべてのテーブルに <code>tenant_id</code> カラムを追加し、クエリ時にフィルタリングする方式です。</p>
+<h4 id="メリット-2">メリット</h4>
+<ul>
+<li><strong>コストが最も低い</strong>: 1つのDBで全テナントを管理</li>
+<li><strong>スケーラビリティ</strong>: 新しいテナント追加が容易</li>
+<li><strong>クロステナント分析</strong>: 全体のデータ分析が可能</li>
+</ul>
+<h4 id="デメリット-2">デメリット</h4>
+<ul>
+<li><strong>セキュリティリスク</strong>: クエリミスでデータ漏洩の可能性</li>
+<li><strong>パフォーマンス</strong>: テーブルサイズが大きくなるとインデックス効率低下</li>
+</ul>
+<h4 id="実装例row-level-security">実装例（Row Level Security）</h4>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="typescript"><code><span class="line"><span style="color:#6A737D">// 行レベル分離の実装（Prisma + PostgreSQL RLS）</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">// 1. Prismaスキーマ定義</span></span>
+<span class="line"><span style="color:#6A737D">/*</span></span>
+<span class="line"><span style="color:#6A737D">model User {</span></span>
+<span class="line"><span style="color:#6A737D">  id        String   @id @default(uuid())</span></span>
+<span class="line"><span style="color:#6A737D">  tenantId  String   @map(&quot;tenant_id&quot;) // 必須フィールド</span></span>
+<span class="line"><span style="color:#6A737D">  email     String   @unique</span></span>
+<span class="line"><span style="color:#6A737D">  name      String</span></span>
+<span class="line"><span style="color:#6A737D">  createdAt DateTime @default(now()) @map(&quot;created_at&quot;)</span></span>
+<span class="line"><span style="color:#6A737D">  </span></span>
+<span class="line"><span style="color:#6A737D">  @@index([tenantId])</span></span>
+<span class="line"><span style="color:#6A737D">  @@map(&quot;users&quot;)</span></span>
+<span class="line"><span style="color:#6A737D">}</span></span>
+<span class="line"><span style="color:#6A737D">*/</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">// 2. PostgreSQLのRow Level Security設定</span></span>
+<span class="line"><span style="color:#F97583">async</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> setupRowLevelSecurity</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">db</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> any</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">  await</span><span style="color:#E1E4E8"> db.</span><span style="color:#B392F0">$executeRaw</span><span style="color:#9ECBFF">`</span></span>
+<span class="line"><span style="color:#9ECBFF">    -- RLSを有効化</span></span>
+<span class="line"><span style="color:#9ECBFF">    ALTER TABLE users ENABLE ROW LEVEL SECURITY;</span></span>
+<span class="line"><span style="color:#9ECBFF">    </span></span>
+<span class="line"><span style="color:#9ECBFF">    -- テナントIDに基づくポリシーを作成</span></span>
+<span class="line"><span style="color:#9ECBFF">    CREATE POLICY tenant_isolation ON users</span></span>
+<span class="line"><span style="color:#9ECBFF">      USING (tenant_id = current_setting(&#39;app.current_tenant&#39;)::text);</span></span>
+<span class="line"><span style="color:#9ECBFF">    </span></span>
+<span class="line"><span style="color:#9ECBFF">    -- アプリケーションロールを作成</span></span>
+<span class="line"><span style="color:#9ECBFF">    CREATE ROLE app_user;</span></span>
+<span class="line"><span style="color:#9ECBFF">    GRANT SELECT, INSERT, UPDATE, DELETE ON users TO app_user;</span></span>
+<span class="line"><span style="color:#9ECBFF">  `</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">// 3. ミドルウェアでテナントIDを設定</span></span>
+<span class="line"><span style="color:#F97583">class</span><span style="color:#B392F0"> TenantContextMiddleware</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">  async</span><span style="color:#B392F0"> setTenantContext</span><span style="color:#E1E4E8">(</span></span>
+<span class="line"><span style="color:#FFAB70">    tenantId</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">    prisma</span><span style="color:#F97583">:</span><span style="color:#B392F0"> PrismaClient</span></span>
+<span class="line"><span style="color:#E1E4E8">  )</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Promise</span><span style="color:#E1E4E8">&lt;</span><span style="color:#79B8FF">void</span><span style="color:#E1E4E8">&gt; {</span></span>
+<span class="line"><span style="color:#6A737D">    // PostgreSQLのセッション変数にテナントIDを設定</span></span>
+<span class="line"><span style="color:#F97583">    await</span><span style="color:#E1E4E8"> prisma.</span><span style="color:#B392F0">$executeRaw</span><span style="color:#9ECBFF">`</span></span>
+<span class="line"><span style="color:#9ECBFF">      SET LOCAL app.current_tenant = ${</span><span style="color:#E1E4E8">tenantId</span><span style="color:#9ECBFF">}</span></span>
+<span class="line"><span style="color:#9ECBFF">    `</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">  }</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">// 4. テナント対応のリポジトリ</span></span>
+<span class="line"><span style="color:#F97583">class</span><span style="color:#B392F0"> TenantAwareRepository</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">  constructor</span><span style="color:#E1E4E8">(</span></span>
+<span class="line"><span style="color:#F97583">    private</span><span style="color:#FFAB70"> prisma</span><span style="color:#F97583">:</span><span style="color:#B392F0"> PrismaClient</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#F97583">    private</span><span style="color:#FFAB70"> tenantId</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span></span>
+<span class="line"><span style="color:#E1E4E8">  ) {}</span></span>
+<span class="line"><span style="color:#E1E4E8">  </span></span>
+<span class="line"><span style="color:#6A737D">  /**</span></span>
+<span class="line"><span style="color:#6A737D">   * ユーザー作成（テナントID自動付与）</span></span>
+<span class="line"><span style="color:#6A737D">   */</span></span>
+<span class="line"><span style="color:#F97583">  async</span><span style="color:#B392F0"> createUser</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">data</span><span style="color:#F97583">:</span><span style="color:#E1E4E8"> { </span><span style="color:#FFAB70">email</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">; </span><span style="color:#FFAB70">name</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8"> }) {</span></span>
+<span class="line"><span style="color:#6A737D">    // テナントIDを必ず含める</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#F97583"> await</span><span style="color:#79B8FF"> this</span><span style="color:#E1E4E8">.prisma.user.</span><span style="color:#B392F0">create</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">      data: {</span></span>
+<span class="line"><span style="color:#F97583">        ...</span><span style="color:#E1E4E8">data,</span></span>
+<span class="line"><span style="color:#E1E4E8">        tenantId: </span><span style="color:#79B8FF">this</span><span style="color:#E1E4E8">.tenantId</span></span>
+<span class="line"><span style="color:#E1E4E8">      }</span></span>
+<span class="line"><span style="color:#E1E4E8">    });</span></span>
+<span class="line"><span style="color:#E1E4E8">  }</span></span>
+<span class="line"><span style="color:#E1E4E8">  </span></span>
+<span class="line"><span style="color:#6A737D">  /**</span></span>
+<span class="line"><span style="color:#6A737D">   * ユーザー取得（テナントID自動フィルタ）</span></span>
+<span class="line"><span style="color:#6A737D">   */</span></span>
+<span class="line"><span style="color:#F97583">  async</span><span style="color:#B392F0"> getUsers</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#6A737D">    // WHERE句に必ずtenantIdを含める</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#F97583"> await</span><span style="color:#79B8FF"> this</span><span style="color:#E1E4E8">.prisma.user.</span><span style="color:#B392F0">findMany</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">      where: {</span></span>
+<span class="line"><span style="color:#E1E4E8">        tenantId: </span><span style="color:#79B8FF">this</span><span style="color:#E1E4E8">.tenantId</span></span>
+<span class="line"><span style="color:#E1E4E8">      }</span></span>
+<span class="line"><span style="color:#E1E4E8">    });</span></span>
+<span class="line"><span style="color:#E1E4E8">  }</span></span>
+<span class="line"><span style="color:#E1E4E8">  </span></span>
+<span class="line"><span style="color:#6A737D">  /**</span></span>
+<span class="line"><span style="color:#6A737D">   * ユーザー更新（テナント検証）</span></span>
+<span class="line"><span style="color:#6A737D">   */</span></span>
+<span class="line"><span style="color:#F97583">  async</span><span style="color:#B392F0"> updateUser</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">userId</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">data</span><span style="color:#F97583">:</span><span style="color:#E1E4E8"> { </span><span style="color:#FFAB70">name</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8"> }) {</span></span>
+<span class="line"><span style="color:#6A737D">    // 更新前にテナント所属を検証</span></span>
+<span class="line"><span style="color:#F97583">    const</span><span style="color:#79B8FF"> user</span><span style="color:#F97583"> =</span><span style="color:#F97583"> await</span><span style="color:#79B8FF"> this</span><span style="color:#E1E4E8">.prisma.user.</span><span style="color:#B392F0">findFirst</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">      where: {</span></span>
+<span class="line"><span style="color:#E1E4E8">        id: userId,</span></span>
+<span class="line"><span style="color:#E1E4E8">        tenantId: </span><span style="color:#79B8FF">this</span><span style="color:#E1E4E8">.tenantId </span><span style="color:#6A737D">// ✅ 必須の検証</span></span>
+<span class="line"><span style="color:#E1E4E8">      }</span></span>
+<span class="line"><span style="color:#E1E4E8">    });</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    if</span><span style="color:#E1E4E8"> (</span><span style="color:#F97583">!</span><span style="color:#E1E4E8">user) {</span></span>
+<span class="line"><span style="color:#F97583">      throw</span><span style="color:#F97583"> new</span><span style="color:#B392F0"> Error</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">&#39;User not found or access denied&#39;</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#F97583"> await</span><span style="color:#79B8FF"> this</span><span style="color:#E1E4E8">.prisma.user.</span><span style="color:#B392F0">update</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">      where: { id: userId },</span></span>
+<span class="line"><span style="color:#E1E4E8">      data</span></span>
+<span class="line"><span style="color:#E1E4E8">    });</span></span>
+<span class="line"><span style="color:#E1E4E8">  }</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">// 5. API実装例</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { Request, Response } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> &#39;express&#39;</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">async</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> getUsersHandler</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">req</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Request</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">res</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Response</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> tenantId</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> req.headers[</span><span style="color:#9ECBFF">&#39;x-tenant-id&#39;</span><span style="color:#E1E4E8">] </span><span style="color:#F97583">as</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">  </span></span>
+<span class="line"><span style="color:#F97583">  if</span><span style="color:#E1E4E8"> (</span><span style="color:#F97583">!</span><span style="color:#E1E4E8">tenantId) {</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> res.</span><span style="color:#B392F0">status</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">400</span><span style="color:#E1E4E8">).</span><span style="color:#B392F0">json</span><span style="color:#E1E4E8">({ error: </span><span style="color:#9ECBFF">&#39;Tenant ID required&#39;</span><span style="color:#E1E4E8"> });</span></span>
+<span class="line"><span style="color:#E1E4E8">  }</span></span>
+<span class="line"><span style="color:#E1E4E8">  </span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> repository</span><span style="color:#F97583"> =</span><span style="color:#F97583"> new</span><span style="color:#B392F0"> TenantAwareRepository</span><span style="color:#E1E4E8">(prisma, tenantId);</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> users</span><span style="color:#F97583"> =</span><span style="color:#F97583"> await</span><span style="color:#E1E4E8"> repository.</span><span style="color:#B392F0">getUsers</span><span style="color:#E1E4E8">();</span></span>
+<span class="line"><span style="color:#E1E4E8">  </span></span>
+<span class="line"><span style="color:#E1E4E8">  res.</span><span style="color:#B392F0">json</span><span style="color:#E1E4E8">({ users });</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<h2 id="セキュリティ実装のベストプラクティス">セキュリティ実装のベストプラクティス</h2>
+<h3 id="1-テナントidの検証を徹底する">1. テナントIDの検証を徹底する</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="typescript"><code><span class="line"><span style="color:#6A737D">// ❌ 危険な実装</span></span>
+<span class="line"><span style="color:#F97583">async</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> getOrder</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">orderId</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">  return</span><span style="color:#F97583"> await</span><span style="color:#E1E4E8"> db.order.</span><span style="color:#B392F0">findUnique</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">    where: { id: orderId }</span></span>
+<span class="line"><span style="color:#E1E4E8">  });</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">// ✅ 安全な実装</span></span>
+<span class="line"><span style="color:#F97583">async</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> getOrder</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">tenantId</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">orderId</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> order</span><span style="color:#F97583"> =</span><span style="color:#F97583"> await</span><span style="color:#E1E4E8"> db.order.</span><span style="color:#B392F0">findFirst</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">    where: {</span></span>
+<span class="line"><span style="color:#E1E4E8">      id: orderId,</span></span>
+<span class="line"><span style="color:#E1E4E8">      tenantId: tenantId </span><span style="color:#6A737D">// 必須の検証</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">  });</span></span>
+<span class="line"><span style="color:#E1E4E8">  </span></span>
+<span class="line"><span style="color:#F97583">  if</span><span style="color:#E1E4E8"> (</span><span style="color:#F97583">!</span><span style="color:#E1E4E8">order) {</span></span>
+<span class="line"><span style="color:#F97583">    throw</span><span style="color:#F97583"> new</span><span style="color:#B392F0"> Error</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">&#39;Order not found or access denied&#39;</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">  }</span></span>
+<span class="line"><span style="color:#E1E4E8">  </span></span>
+<span class="line"><span style="color:#F97583">  return</span><span style="color:#E1E4E8"> order;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<h3 id="2-ミドルウェアでテナントコンテキストを管理">2. ミドルウェアでテナントコンテキストを管理</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="typescript"><code><span class="line"><span style="color:#6A737D">// Express ミドルウェア例</span></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> { Request, Response, NextFunction } </span><span style="color:#F97583">from</span><span style="color:#9ECBFF"> &#39;express&#39;</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">interface</span><span style="color:#B392F0"> TenantRequest</span><span style="color:#F97583"> extends</span><span style="color:#B392F0"> Request</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#FFAB70">  tenantId</span><span style="color:#F97583">?:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">async</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> tenantMiddleware</span><span style="color:#E1E4E8">(</span></span>
+<span class="line"><span style="color:#FFAB70">  req</span><span style="color:#F97583">:</span><span style="color:#B392F0"> TenantRequest</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">  res</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Response</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">  next</span><span style="color:#F97583">:</span><span style="color:#B392F0"> NextFunction</span></span>
+<span class="line"><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#6A737D">  // JWTトークンからテナントIDを抽出</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> token</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> req.headers.authorization?.</span><span style="color:#B392F0">replace</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">&#39;Bearer &#39;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&#39;&#39;</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">  </span></span>
+<span class="line"><span style="color:#F97583">  if</span><span style="color:#E1E4E8"> (</span><span style="color:#F97583">!</span><span style="color:#E1E4E8">token) {</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> res.</span><span style="color:#B392F0">status</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">401</span><span style="color:#E1E4E8">).</span><span style="color:#B392F0">json</span><span style="color:#E1E4E8">({ error: </span><span style="color:#9ECBFF">&#39;Unauthorized&#39;</span><span style="color:#E1E4E8"> });</span></span>
+<span class="line"><span style="color:#E1E4E8">  }</span></span>
+<span class="line"><span style="color:#E1E4E8">  </span></span>
+<span class="line"><span style="color:#F97583">  try</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">    const</span><span style="color:#79B8FF"> decoded</span><span style="color:#F97583"> =</span><span style="color:#B392F0"> verifyToken</span><span style="color:#E1E4E8">(token);</span></span>
+<span class="line"><span style="color:#E1E4E8">    req.tenantId </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> decoded.tenantId;</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#6A737D">    // テナントの存在確認</span></span>
+<span class="line"><span style="color:#F97583">    const</span><span style="color:#79B8FF"> tenant</span><span style="color:#F97583"> =</span><span style="color:#F97583"> await</span><span style="color:#E1E4E8"> db.tenant.</span><span style="color:#B392F0">findUnique</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">      where: { id: req.tenantId }</span></span>
+<span class="line"><span style="color:#E1E4E8">    });</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    if</span><span style="color:#E1E4E8"> (</span><span style="color:#F97583">!</span><span style="color:#E1E4E8">tenant </span><span style="color:#F97583">||</span><span style="color:#F97583"> !</span><span style="color:#E1E4E8">tenant.active) {</span></span>
+<span class="line"><span style="color:#F97583">      return</span><span style="color:#E1E4E8"> res.</span><span style="color:#B392F0">status</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">403</span><span style="color:#E1E4E8">).</span><span style="color:#B392F0">json</span><span style="color:#E1E4E8">({ error: </span><span style="color:#9ECBFF">&#39;Tenant not found or inactive&#39;</span><span style="color:#E1E4E8"> });</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#B392F0">    next</span><span style="color:#E1E4E8">();</span></span>
+<span class="line"><span style="color:#E1E4E8">  } </span><span style="color:#F97583">catch</span><span style="color:#E1E4E8"> (error) {</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> res.</span><span style="color:#B392F0">status</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">401</span><span style="color:#E1E4E8">).</span><span style="color:#B392F0">json</span><span style="color:#E1E4E8">({ error: </span><span style="color:#9ECBFF">&#39;Invalid token&#39;</span><span style="color:#E1E4E8"> });</span></span>
+<span class="line"><span style="color:#E1E4E8">  }</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">// 使用例</span></span>
+<span class="line"><span style="color:#E1E4E8">app.</span><span style="color:#B392F0">use</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">&#39;/api&#39;</span><span style="color:#E1E4E8">, tenantMiddleware);</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">app.</span><span style="color:#B392F0">get</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">&#39;/api/users&#39;</span><span style="color:#E1E4E8">, </span><span style="color:#F97583">async</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">req</span><span style="color:#F97583">:</span><span style="color:#B392F0"> TenantRequest</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">res</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">  const</span><span style="color:#79B8FF"> users</span><span style="color:#F97583"> =</span><span style="color:#F97583"> await</span><span style="color:#B392F0"> getUsersForTenant</span><span style="color:#E1E4E8">(req.tenantId</span><span style="color:#F97583">!</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">  res.</span><span style="color:#B392F0">json</span><span style="color:#E1E4E8">({ users });</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<h3 id="3-データベースレベルの制約を追加">3. データベースレベルの制約を追加</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="sql"><code><span class="line"><span style="color:#6A737D">-- テナントIDにNOT NULL制約を追加</span></span>
+<span class="line"><span style="color:#F97583">ALTER</span><span style="color:#F97583"> TABLE</span><span style="color:#E1E4E8"> users </span></span>
+<span class="line"><span style="color:#F97583">  ALTER</span><span style="color:#E1E4E8"> COLUMN tenant_id </span><span style="color:#F97583">SET</span><span style="color:#F97583"> NOT NULL</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">-- 複合ユニーク制約でテナント内の一意性を保証</span></span>
+<span class="line"><span style="color:#F97583">ALTER</span><span style="color:#F97583"> TABLE</span><span style="color:#E1E4E8"> users</span></span>
+<span class="line"><span style="color:#F97583">  ADD</span><span style="color:#F97583"> CONSTRAINT</span><span style="color:#E1E4E8"> unique_email_per_tenant </span></span>
+<span class="line"><span style="color:#F97583">  UNIQUE</span><span style="color:#E1E4E8"> (tenant_id, email);</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">-- テナントIDのインデックスを作成（パフォーマンス向上）</span></span>
+<span class="line"><span style="color:#F97583">CREATE</span><span style="color:#F97583"> INDEX</span><span style="color:#B392F0"> idx_users_tenant_id</span><span style="color:#F97583"> ON</span><span style="color:#E1E4E8"> users(tenant_id);</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">-- 外部キー制約でテナントの存在を保証</span></span>
+<span class="line"><span style="color:#F97583">ALTER</span><span style="color:#F97583"> TABLE</span><span style="color:#E1E4E8"> users</span></span>
+<span class="line"><span style="color:#F97583">  ADD</span><span style="color:#F97583"> CONSTRAINT</span><span style="color:#E1E4E8"> fk_users_tenant</span></span>
+<span class="line"><span style="color:#F97583">  FOREIGN KEY</span><span style="color:#E1E4E8"> (tenant_id) </span><span style="color:#F97583">REFERENCES</span><span style="color:#E1E4E8"> tenants(id)</span></span>
+<span class="line"><span style="color:#F97583">  ON DELETE CASCADE</span><span style="color:#E1E4E8">;</span></span></code></pre>
+<h2 id="実際のビジネスシーンでの活用例">実際のビジネスシーンでの活用例</h2>
+<h3 id="ケース1エンタープライズ顧客の要求に対応">ケース1：エンタープライズ顧客の要求に対応</h3>
+<p><strong>状況</strong>: 大手企業から「データを物理的に分離してほしい」という要求</p>
+<p><strong>解決策</strong>: ハイブリッドアプローチを採用</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="typescript"><code><span class="line"><span style="color:#6A737D">// テナント設定に基づいて分離方式を切り替え</span></span>
+<span class="line"><span style="color:#F97583">class</span><span style="color:#B392F0"> AdaptiveTenantManager</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">  async</span><span style="color:#B392F0"> getRepository</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">tenantId</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">    const</span><span style="color:#79B8FF"> tenant</span><span style="color:#F97583"> =</span><span style="color:#F97583"> await</span><span style="color:#79B8FF"> this</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">getTenantConfig</span><span style="color:#E1E4E8">(tenantId);</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    switch</span><span style="color:#E1E4E8"> (tenant.isolationLevel) {</span></span>
+<span class="line"><span style="color:#F97583">      case</span><span style="color:#9ECBFF"> &#39;DATABASE&#39;</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#6A737D">        // エンタープライズ顧客は専用DB</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#F97583"> new</span><span style="color:#B392F0"> DatabaseIsolatedRepository</span><span style="color:#E1E4E8">(tenantId);</span></span>
+<span class="line"><span style="color:#E1E4E8">      </span></span>
+<span class="line"><span style="color:#F97583">      case</span><span style="color:#9ECBFF"> &#39;SCHEMA&#39;</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#6A737D">        // 中規模顧客は専用スキーマ</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#F97583"> new</span><span style="color:#B392F0"> SchemaIsolatedRepository</span><span style="color:#E1E4E8">(tenantId);</span></span>
+<span class="line"><span style="color:#E1E4E8">      </span></span>
+<span class="line"><span style="color:#F97583">      case</span><span style="color:#9ECBFF"> &#39;ROW&#39;</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#6A737D">        // 小規模顧客は行レベル分離</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#F97583"> new</span><span style="color:#B392F0"> RowLevelRepository</span><span style="color:#E1E4E8">(tenantId);</span></span>
+<span class="line"><span style="color:#E1E4E8">      </span></span>
+<span class="line"><span style="color:#F97583">      default</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#F97583">        throw</span><span style="color:#F97583"> new</span><span style="color:#B392F0"> Error</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">`Unknown isolation level: ${</span><span style="color:#E1E4E8">tenant</span><span style="color:#9ECBFF">.</span><span style="color:#E1E4E8">isolationLevel</span><span style="color:#9ECBFF">}`</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">  }</span></span>
+<span class="line"><span style="color:#E1E4E8">  </span></span>
+<span class="line"><span style="color:#F97583">  private</span><span style="color:#F97583"> async</span><span style="color:#B392F0"> getTenantConfig</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">tenantId</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#F97583"> await</span><span style="color:#E1E4E8"> db.tenant.</span><span style="color:#B392F0">findUnique</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">      where: { id: tenantId },</span></span>
+<span class="line"><span style="color:#E1E4E8">      select: {</span></span>
+<span class="line"><span style="color:#E1E4E8">        id: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">        isolationLevel: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">        databaseUrl: </span><span style="color:#79B8FF">true</span></span>
+<span class="line"><span style="color:#E1E4E8">      }</span></span>
+<span class="line"><span style="color:#E1E4E8">    });</span></span>
+<span class="line"><span style="color:#E1E4E8">  }</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<h3 id="ケース2監査ログでテナント間アクセスを検出">ケース2：監査ログでテナント間アクセスを検出</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="typescript"><code><span class="line"><span style="color:#6A737D">// 監査ログの実装</span></span>
+<span class="line"><span style="color:#F97583">class</span><span style="color:#B392F0"> AuditLogger</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">  async</span><span style="color:#B392F0"> logDataAccess</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">params</span><span style="color:#F97583">:</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#FFAB70">    tenantId</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#FFAB70">    userId</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#FFAB70">    action</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#FFAB70">    resourceType</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#FFAB70">    resourceId</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#FFAB70">    success</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> boolean</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">  }) {</span></span>
+<span class="line"><span style="color:#F97583">    await</span><span style="color:#E1E4E8"> db.auditLog.</span><span style="color:#B392F0">create</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">      data: {</span></span>
+<span class="line"><span style="color:#F97583">        ...</span><span style="color:#E1E4E8">params,</span></span>
+<span class="line"><span style="color:#E1E4E8">        timestamp: </span><span style="color:#F97583">new</span><span style="color:#B392F0"> Date</span><span style="color:#E1E4E8">(),</span></span>
+<span class="line"><span style="color:#E1E4E8">        ipAddress: </span><span style="color:#79B8FF">this</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">getClientIp</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">      }</span></span>
+<span class="line"><span style="color:#E1E4E8">    });</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#6A737D">    // 異常なアクセスパターンを検出</span></span>
+<span class="line"><span style="color:#F97583">    await</span><span style="color:#79B8FF"> this</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">detectAnomalies</span><span style="color:#E1E4E8">(params);</span></span>
+<span class="line"><span style="color:#E1E4E8">  }</span></span>
+<span class="line"><span style="color:#E1E4E8">  </span></span>
+<span class="line"><span style="color:#F97583">  private</span><span style="color:#F97583"> async</span><span style="color:#B392F0"> detectAnomalies</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">params</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> any</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#6A737D">    // 過去5分間に同一ユーザーが複数テナントにアクセスしていないか確認</span></span>
+<span class="line"><span style="color:#F97583">    const</span><span style="color:#79B8FF"> recentAccesses</span><span style="color:#F97583"> =</span><span style="color:#F97583"> await</span><span style="color:#E1E4E8"> db.auditLog.</span><span style="color:#B392F0">findMany</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">      where: {</span></span>
+<span class="line"><span style="color:#E1E4E8">        userId: params.userId,</span></span>
+<span class="line"><span style="color:#E1E4E8">        timestamp: {</span></span>
+<span class="line"><span style="color:#E1E4E8">          gte: </span><span style="color:#F97583">new</span><span style="color:#B392F0"> Date</span><span style="color:#E1E4E8">(Date.</span><span style="color:#B392F0">now</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">-</span><span style="color:#79B8FF"> 5</span><span style="color:#F97583"> *</span><span style="color:#79B8FF"> 60</span><span style="color:#F97583"> *</span><span style="color:#79B8FF"> 1000</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">        }</span></span>
+<span class="line"><span style="color:#E1E4E8">      },</span></span>
+<span class="line"><span style="color:#E1E4E8">      distinct: [</span><span style="color:#9ECBFF">&#39;tenantId&#39;</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#E1E4E8">    });</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    if</span><span style="color:#E1E4E8"> (recentAccesses.</span><span style="color:#79B8FF">length</span><span style="color:#F97583"> &gt;</span><span style="color:#79B8FF"> 1</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">      console.</span><span style="color:#B392F0">warn</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">&#39;🚨 Potential cross-tenant access detected:&#39;</span><span style="color:#E1E4E8">, {</span></span>
+<span class="line"><span style="color:#E1E4E8">        userId: params.userId,</span></span>
+<span class="line"><span style="color:#E1E4E8">        tenants: recentAccesses.</span><span style="color:#B392F0">map</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">a</span><span style="color:#F97583"> =&gt;</span><span style="color:#E1E4E8"> a.tenantId)</span></span>
+<span class="line"><span style="color:#E1E4E8">      });</span></span>
+<span class="line"><span style="color:#E1E4E8">      </span></span>
+<span class="line"><span style="color:#6A737D">      // アラートを送信</span></span>
+<span class="line"><span style="color:#F97583">      await</span><span style="color:#79B8FF"> this</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">sendSecurityAlert</span><span style="color:#E1E4E8">(params.userId, recentAccesses);</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">  }</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<h3 id="ケース3テナント分離のテスト自動化">ケース3：テナント分離のテスト自動化</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="typescript"><code><span class="line"><span style="color:#6A737D">// テナント分離のE2Eテスト</span></span>
+<span class="line"><span style="color:#B392F0">describe</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">&#39;Tenant Isolation Tests&#39;</span><span style="color:#E1E4E8">, () </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">  let</span><span style="color:#E1E4E8"> tenant1</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Tenant</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">  let</span><span style="color:#E1E4E8"> tenant2</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Tenant</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">  </span></span>
+<span class="line"><span style="color:#B392F0">  beforeEach</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">async</span><span style="color:#E1E4E8"> () </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">    tenant1 </span><span style="color:#F97583">=</span><span style="color:#F97583"> await</span><span style="color:#B392F0"> createTenant</span><span style="color:#E1E4E8">({ name: </span><span style="color:#9ECBFF">&#39;Tenant 1&#39;</span><span style="color:#E1E4E8"> });</span></span>
+<span class="line"><span style="color:#E1E4E8">    tenant2 </span><span style="color:#F97583">=</span><span style="color:#F97583"> await</span><span style="color:#B392F0"> createTenant</span><span style="color:#E1E4E8">({ name: </span><span style="color:#9ECBFF">&#39;Tenant 2&#39;</span><span style="color:#E1E4E8"> });</span></span>
+<span class="line"><span style="color:#E1E4E8">  });</span></span>
+<span class="line"><span style="color:#E1E4E8">  </span></span>
+<span class="line"><span style="color:#B392F0">  it</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">&#39;should not allow cross-tenant data access&#39;</span><span style="color:#E1E4E8">, </span><span style="color:#F97583">async</span><span style="color:#E1E4E8"> () </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#6A737D">    // Tenant 1にユーザーを作成</span></span>
+<span class="line"><span style="color:#F97583">    const</span><span style="color:#79B8FF"> user1</span><span style="color:#F97583"> =</span><span style="color:#F97583"> await</span><span style="color:#B392F0"> createUser</span><span style="color:#E1E4E8">({</span></span>
+<span class="line"><span style="color:#E1E4E8">      tenantId: tenant1.id,</span></span>
+<span class="line"><span style="color:#E1E4E8">      email: </span><span style="color:#9ECBFF">&#39;user1@tenant1.com&#39;</span></span>
+<span class="line"><span style="color:#E1E4E8">    });</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#6A737D">    // Tenant 2のコンテキストでTenant 1のユーザーにアクセス試行</span></span>
+<span class="line"><span style="color:#F97583">    const</span><span style="color:#79B8FF"> repository</span><span style="color:#F97583"> =</span><span style="color:#F97583"> new</span><span style="color:#B392F0"> TenantAwareRepository</span><span style="color:#E1E4E8">(prisma, tenant2.id);</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    const</span><span style="color:#79B8FF"> user</span><span style="color:#F97583"> =</span><span style="color:#F97583"> await</span><span style="color:#E1E4E8"> repository.</span><span style="color:#B392F0">getUser</span><span style="color:#E1E4E8">(user1.id);</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#6A737D">    // アクセスできないことを確認</span></span>
+<span class="line"><span style="color:#B392F0">    expect</span><span style="color:#E1E4E8">(user).</span><span style="color:#B392F0">toBeNull</span><span style="color:#E1E4E8">();</span></span>
+<span class="line"><span style="color:#E1E4E8">  });</span></span>
+<span class="line"><span style="color:#E1E4E8">  </span></span>
+<span class="line"><span style="color:#B392F0">  it</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">&#39;should enforce tenant_id in all queries&#39;</span><span style="color:#E1E4E8">, </span><span style="color:#F97583">async</span><span style="color:#E1E4E8"> () </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#6A737D">    // クエリログを監視</span></span>
+<span class="line"><span style="color:#F97583">    const</span><span style="color:#79B8FF"> queryLog</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">[] </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> [];</span></span>
+<span class="line"><span style="color:#E1E4E8">    prisma.</span><span style="color:#B392F0">$use</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">async</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">params</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">next</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">      queryLog.</span><span style="color:#B392F0">push</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">JSON</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">stringify</span><span style="color:#E1E4E8">(params));</span></span>
+<span class="line"><span style="color:#F97583">      return</span><span style="color:#B392F0"> next</span><span style="color:#E1E4E8">(params);</span></span>
+<span class="line"><span style="color:#E1E4E8">    });</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#6A737D">    // ユーザー取得</span></span>
+<span class="line"><span style="color:#F97583">    const</span><span style="color:#79B8FF"> repository</span><span style="color:#F97583"> =</span><span style="color:#F97583"> new</span><span style="color:#B392F0"> TenantAwareRepository</span><span style="color:#E1E4E8">(prisma, tenant1.id);</span></span>
+<span class="line"><span style="color:#F97583">    await</span><span style="color:#E1E4E8"> repository.</span><span style="color:#B392F0">getUsers</span><span style="color:#E1E4E8">();</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#6A737D">    // すべてのクエリにtenant_idフィルタが含まれることを確認</span></span>
+<span class="line"><span style="color:#F97583">    const</span><span style="color:#79B8FF"> allQueriesHaveTenantId</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> queryLog.</span><span style="color:#B392F0">every</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">log</span><span style="color:#F97583"> =&gt;</span><span style="color:#E1E4E8"> </span></span>
+<span class="line"><span style="color:#E1E4E8">      log.</span><span style="color:#B392F0">includes</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">&#39;tenant_id&#39;</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">||</span><span style="color:#E1E4E8"> log.</span><span style="color:#B392F0">includes</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">&#39;tenantId&#39;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">    );</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#B392F0">    expect</span><span style="color:#E1E4E8">(allQueriesHaveTenantId).</span><span style="color:#B392F0">toBe</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">  });</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<h2 id="よくある質問">よくある質問</h2>
+<h3 id="どの分離方式を選べばよいですか">どの分離方式を選べばよいですか？</h3>
+<p>以下の基準で選択してください：</p>
+<ul>
+<li><strong>年商1億円以上のエンタープライズ顧客が多い</strong>: データベース分離</li>
+<li><strong>中小企業が中心で、一部大手顧客がいる</strong>: ハイブリッド（スキーマ + DB分離）</li>
+<li><strong>スタートアップ向けで顧客数が多い</strong>: 行レベル分離</li>
+</ul>
+<h3 id="パフォーマンスへの影響はありますか">パフォーマンスへの影響はありますか？</h3>
+<p>はい、分離方式によって影響があります：</p>
+<ul>
+<li><strong>データベース分離</strong>: 接続プールの管理が複雑になる</li>
+<li><strong>スキーマ分離</strong>: スキーマ切り替えのオーバーヘッド（数ms）</li>
+<li><strong>行レベル分離</strong>: インデックスサイズが大きくなる</li>
+</ul>
+<h3 id="既存システムから移行できますか">既存システムから移行できますか？</h3>
+<p>可能です。段階的な移行を推奨します：</p>
+<ol>
+<li><strong>Phase 1</strong>: 行レベル分離を導入</li>
+<li><strong>Phase 2</strong>: 大口顧客をスキーマ分離に移行</li>
+<li><strong>Phase 3</strong>: エンタープライズ顧客をDB分離に移行</li>
+</ol>
+<hr/>
+<h2 id="おわりに">おわりに</h2>
+<p>堅牢なテナント分離は、エンタープライズSaaSの信頼性を支える基盤です。セキュリティ要件とコストのバランスを考慮し、適切な分離方式を選択することが重要です。</p>
+<p>重要なのは、 <strong>テナントIDの検証を徹底すること</strong> と、 <strong>監査ログで異常を検出できる仕組みを構築すること</strong> です。一度のデータ漏洩で失う信頼は、取り戻すことが困難です。</p>
+<p>私たちShineosでは、マルチテナントSaaSのアーキテクチャ設計や、セキュリティ監査対応の支援を行っています。テナント分離の実装やSOC 2認証取得など、お気軽にご相談ください。</p>
+<h2 id="参考リンク">参考リンク</h2>
+<ul>
+<li>[1] <a href="https://aws.amazon.com/jp/builders-flash/202410/multi-tenant-saas-pattern/" target="_blank" rel="noopener noreferrer"> Multi-Tenant SaaS Architecture Patterns - AWS </a></li>
+<li>[2] <a href="https://www.postgresql.org/docs/current/ddl-rowsecurity.html" target="_blank" rel="noopener noreferrer"> PostgreSQL Row Level Security - PostgreSQL Documentation </a></li>
+<li>[3] <a href="https://github.com/OWASP/CheatSheetSeries/issues/1928" target="_blank" rel="noopener noreferrer"> OWASP Multi-Tenancy Cheat Sheet </a></li>
+<li>[4] <a href="https://learn.microsoft.com/en-us/azure/architecture/guide/multitenant/overview" target="_blank" rel="noopener noreferrer"> Building Multi-Tenant SaaS Applications - Microsoft Azure </a></li>
+</ul> </div> <!-- Article Footer (Share & Tags) --> <footer class="mt-20 pt-10 border-t border-gray-100 dark:border-slate-800"> <div class="mb-12"> <div class="flex items-center space-x-4"> <span class="text-sm font-bold text-gray-500">Share:</span> <a href="https://twitter.com/intent/tweet?text=%E3%82%A8%E3%83%B3%E3%82%BF%E3%83%BC%E3%83%97%E3%83%A9%E3%82%A4%E3%82%BASaaS%E3%81%AB%E5%BF%85%E9%A0%88%E3%81%AA%E3%80%8C%E5%A0%85%E7%89%A2%E3%81%AA%E3%83%86%E3%83%8A%E3%83%B3%E3%83%88%E5%88%86%E9%9B%A2%E3%80%8D%E3%81%AE%E8%A8%AD%E8%A8%88%E3%83%91%E3%82%BF%E3%83%BC%E3%83%B3%E3%81%A8%E3%82%BB%E3%82%AD%E3%83%A5%E3%83%AA%E3%83%86%E3%82%A3%E5%AE%9F%E8%A3%85&url=https%3A%2F%2Fblog.shineos.com%2Fposts%2F2025-12-11-enterprise-saas-tenant-isolation%2F" target="_blank" rel="noopener noreferrer" class="p-2 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors" aria-label="Share on X"> <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path></svg> </a> <a href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fblog.shineos.com%2Fposts%2F2025-12-11-enterprise-saas-tenant-isolation%2F" target="_blank" rel="noopener noreferrer" class="p-2 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors" aria-label="Share on LinkedIn"> <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M20.5 2h-17A1.5 1.5 0 002 3.5v17A1.5 1.5 0 003.5 22h17a1.5 1.5 0 001.5-1.5v-17A1.5 1.5 0 0020.5 2zM8 19H5v-9h3zM6.5 8.25A1.75 1.75 0 118.3 6.5a1.78 1.78 0 01-1.8 1.75zM19 19h-3v-4.74c0-1.42-.6-1.93-1.38-1.93A1.74 1.74 0 0013 14.19V19h-3v-9h2.9v1.3a3.11 3.11 0 012.7-1.4c1.55 0 3.36.86 3.36 3.66z"></path></svg> </a> </div> </div> </footer> </article> </main> <!-- Sidebar --> <aside class="w-full"> <div class="sticky top-24 space-y-6 w-full self-start"> <!-- Search Widget --> <div class="hidden md:block relative z-50 bg-white dark:bg-shineos-900 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-white/5"> <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-4">
+検索
+</h3> <div id="search" class="w-full relative"></div> <script>
+    window.addEventListener("DOMContentLoaded", (event) => {
+        new PagefindUI({
+            element: "#search",
+            showSubResults: true,
+            showImages: false,
+            translations: {
+                placeholder: "記事を検索...",
+                zero_results:
+                    "[SEARCH_TERM] に一致する記事が見つかりませんでした",
+            },
+        });
+    });
+</script> <link href="/pagefind/pagefind-ui.css" rel="stylesheet"> <script src="/pagefind/pagefind-ui.js"></script>  </div> <!-- Table of Contents --> <div class="hidden md:block bg-white dark:bg-shineos-900 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-white/5"> <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-4">
+目次
+</h3> <ul class="space-y-2" data-astro-cid-xvrfupwn> <li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#テナント分離とは" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> テナント分離とは？ </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#まとめ" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> まとめ </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#なぜテナント分離が重要なのか" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> なぜテナント分離が重要なのか？ </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#データ漏洩のリスク" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> データ漏洩のリスク </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#エンタープライズ要件" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> エンタープライズ要件 </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#テナント分離の3つの設計パターン" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> テナント分離の3つの設計パターン </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#パターン1データベース分離database-per-tenant" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> パターン1：データベース分離（Database per Tenant） </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#メリット" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> メリット </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#デメリット" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> デメリット </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#実装例" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 実装例 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#パターン2スキーマ分離schema-per-tenant" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> パターン2：スキーマ分離（Schema per Tenant） </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#メリット-1" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> メリット </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#デメリット-1" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> デメリット </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#実装例postgresql" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 実装例（PostgreSQL） </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#パターン3行レベル分離row-level-isolation" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> パターン3：行レベル分離（Row-Level Isolation） </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#メリット-2" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> メリット </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#デメリット-2" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> デメリット </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#実装例row-level-security" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 実装例（Row Level Security） </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#セキュリティ実装のベストプラクティス" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> セキュリティ実装のベストプラクティス </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#1-テナントidの検証を徹底する" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 1. テナントIDの検証を徹底する </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#2-ミドルウェアでテナントコンテキストを管理" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 2. ミドルウェアでテナントコンテキストを管理 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#3-データベースレベルの制約を追加" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 3. データベースレベルの制約を追加 </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#実際のビジネスシーンでの活用例" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 実際のビジネスシーンでの活用例 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#ケース1エンタープライズ顧客の要求に対応" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> ケース1：エンタープライズ顧客の要求に対応 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#ケース2監査ログでテナント間アクセスを検出" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> ケース2：監査ログでテナント間アクセスを検出 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#ケース3テナント分離のテスト自動化" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> ケース3：テナント分離のテスト自動化 </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#よくある質問" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> よくある質問 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#どの分離方式を選べばよいですか" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> どの分離方式を選べばよいですか？ </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#パフォーマンスへの影響はありますか" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> パフォーマンスへの影響はありますか？ </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#既存システムから移行できますか" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 既存システムから移行できますか？ </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#おわりに" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> おわりに </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#参考リンク" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 参考リンク </a> </li> </ul>  </div> <!-- Categories Widget -->  <!-- Tags Widget --> <div class="bg-white dark:bg-shineos-900 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-white/5"> <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-4">
+Tags
+</h3> <div class="flex flex-wrap gap-2"> <a href="/tags/LLM" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"> LLM </a><a href="/tags/SaaS" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"> SaaS </a><a href="/tags/プロダクト開発" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"> プロダクト開発 </a><a href="/tags/AIエージェント" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"> AIエージェント </a><a href="/tags/RAG" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"> RAG </a> </div> </div> <!-- Related Posts --> <div class="bg-white dark:bg-shineos-900 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-white/5"> <h3 class="text-base font-bold text-gray-900 dark:text-white mb-4 relative inline-block">
+関連記事
+<span class="absolute -bottom-1 left-0 w-full h-0.5 bg-blue-600 rounded-full"></span> </h3> <div class="space-y-4"> <a href="/posts/2025-12-12-multi-tenant-saas-architecture" class="group flex gap-3 items-start bg-gray-50 dark:bg-shineos-800/50 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-shineos-800 transition-colors"> <div class="shrink-0 w-24 aspect-video rounded-md overflow-hidden bg-gray-200 dark:bg-gray-700"> <img src="/images/posts/2025/12/multi-tenant-saas-architecture/header.webp" alt="マルチテナントSaaSアーキテクチャの設計指針 - スケーラブルなSaaS基盤の構築" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"> </div> <div class="flex flex-col min-w-0"> <div class="flex items-center gap-2 mb-1"> <span class="text-[10px] items-center px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 font-medium truncate max-w-[80px]"> SaaS </span> <span class="text-[10px] text-gray-400"> 2025/12/12 </span> </div> <h4 class="text-xs font-bold text-gray-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-cyan-400 transition-colors line-clamp-3 leading-relaxed"> マルチテナントSaaSアーキテクチャの設計指針 - スケーラブルなSaaS基盤の構築 </h4> </div> </a><a href="/posts/2025-12-10-subscription-billing-database-design" class="group flex gap-3 items-start bg-gray-50 dark:bg-shineos-800/50 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-shineos-800 transition-colors"> <div class="shrink-0 w-24 aspect-video rounded-md overflow-hidden bg-gray-200 dark:bg-gray-700"> <img src="/images/posts/2025/12/subscription-billing-database-design/header.webp" alt="サブスクリプションビジネスを支える柔軟な課金システムのデータベース設計 - 拡張性とメンテナンス性を両立する実践手法" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"> </div> <div class="flex flex-col min-w-0"> <div class="flex items-center gap-2 mb-1"> <span class="text-[10px] items-center px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 font-medium truncate max-w-[80px]"> SaaS </span> <span class="text-[10px] text-gray-400"> 2025/12/10 </span> </div> <h4 class="text-xs font-bold text-gray-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-cyan-400 transition-colors line-clamp-3 leading-relaxed"> サブスクリプションビジネスを支える柔軟な課金システムのデータベース設計 - 拡張性とメンテナンス性を両立する実践手法 </h4> </div> </a> </div> </div> </div> </aside> </div>  <div id="mobile-toc-container" class="md:hidden"> <button id="mobile-toc-btn" class="fixed bottom-6 right-6 z-50 w-14 h-14 bg-white dark:bg-shineos-800 rounded-full shadow-lg border border-gray-200 dark:border-white/10 flex items-center justify-center text-gray-700 dark:text-white hover:scale-105 transition-transform"> <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg> </button> <div id="mobile-toc-overlay" class="fixed inset-0 z-40 bg-white/95 dark:bg-shineos-950/95 backdrop-blur-sm transform transition-transform duration-300 translate-y-full flex flex-col pt-20 px-6 pb-6 overflow-y-auto"> <button id="close-toc-btn" class="absolute top-6 right-6 p-2 text-gray-500 hover:text-gray-900 dark:hover:text-white"> <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg> </button> <h2 class="text-xl font-bold mb-6 text-gray-900 dark:text-white">
+目次
+</h2> <ul class="space-y-2" data-astro-cid-xvrfupwn> <li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#テナント分離とは" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> テナント分離とは？ </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#まとめ" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> まとめ </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#なぜテナント分離が重要なのか" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> なぜテナント分離が重要なのか？ </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#データ漏洩のリスク" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> データ漏洩のリスク </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#エンタープライズ要件" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> エンタープライズ要件 </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#テナント分離の3つの設計パターン" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> テナント分離の3つの設計パターン </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#パターン1データベース分離database-per-tenant" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> パターン1：データベース分離（Database per Tenant） </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#メリット" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> メリット </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#デメリット" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> デメリット </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#実装例" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 実装例 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#パターン2スキーマ分離schema-per-tenant" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> パターン2：スキーマ分離（Schema per Tenant） </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#メリット-1" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> メリット </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#デメリット-1" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> デメリット </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#実装例postgresql" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 実装例（PostgreSQL） </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#パターン3行レベル分離row-level-isolation" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> パターン3：行レベル分離（Row-Level Isolation） </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#メリット-2" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> メリット </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#デメリット-2" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> デメリット </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#実装例row-level-security" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 実装例（Row Level Security） </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#セキュリティ実装のベストプラクティス" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> セキュリティ実装のベストプラクティス </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#1-テナントidの検証を徹底する" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 1. テナントIDの検証を徹底する </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#2-ミドルウェアでテナントコンテキストを管理" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 2. ミドルウェアでテナントコンテキストを管理 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#3-データベースレベルの制約を追加" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 3. データベースレベルの制約を追加 </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#実際のビジネスシーンでの活用例" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 実際のビジネスシーンでの活用例 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#ケース1エンタープライズ顧客の要求に対応" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> ケース1：エンタープライズ顧客の要求に対応 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#ケース2監査ログでテナント間アクセスを検出" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> ケース2：監査ログでテナント間アクセスを検出 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#ケース3テナント分離のテスト自動化" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> ケース3：テナント分離のテスト自動化 </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#よくある質問" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> よくある質問 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#どの分離方式を選べばよいですか" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> どの分離方式を選べばよいですか？ </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#パフォーマンスへの影響はありますか" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> パフォーマンスへの影響はありますか？ </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#既存システムから移行できますか" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 既存システムから移行できますか？ </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#おわりに" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> おわりに </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#参考リンク" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 参考リンク </a> </li> </ul>  </div> </div> <script type="module">function r(){document.querySelectorAll("pre").forEach(t=>{const o=document.createElement("div");o.className="absolute top-2 right-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100 z-10",getComputedStyle(t).position==="static"&&(t.style.position="relative"),t.classList.add("group");const e=document.createElement("button");e.className="w-10 h-10 flex items-center justify-center rounded-md bg-gray-700/80 hover:bg-gray-600 text-white shadow-sm backdrop-blur-sm transition-colors border border-white/10",e.innerHTML=`
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+        </svg>
+      `,e.title="Copy code",e.setAttribute("aria-label","ソースコードをコピー"),e.addEventListener("click",async()=>{const n=t.querySelector("code"),a=n?n.innerText:t.innerText;try{await navigator.clipboard.writeText(a),e.innerHTML=`
+              <svg class="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+            `,setTimeout(()=>{e.innerHTML=`
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                  </svg>
+                `},2e3)}catch(i){console.error("Failed to copy code:",i)}}),o.appendChild(e),t.appendChild(o)})}r();document.addEventListener("astro:page-load",r);</script> <script type="module">const c=document.getElementById("mobile-toc-btn"),l=document.getElementById("close-toc-btn"),t=document.getElementById("mobile-toc-overlay"),n=t?.querySelectorAll("a");function e(){t.classList.toggle("translate-y-full"),document.body.classList.toggle("overflow-hidden")}c?.addEventListener("click",e);l?.addEventListener("click",e);n?.forEach(o=>{o.addEventListener("click",e)});</script>  </main> <footer class="border-t border-gray-200 dark:border-white/5 bg-white dark:bg-shineos-900/50 backdrop-blur-lg mt-20 transition-colors duration-300"> <div class="max-w-5xl mx-auto px-6 py-12 flex flex-col md:flex-row justify-between items-center gap-6"> <div class="text-center md:text-left"> <div class="text-xl font-bold text-gray-900 dark:text-white mb-2">
+Shineos Inc.
+</div> <p class="text-gray-500 dark:text-gray-500 text-sm">
+開発チームによる技術ブログ。<br> モダンなWeb開発、AIエージェント、DXの実践知見を共有します。
+</p> </div> <div class="flex items-center space-x-6 text-sm"> <a href="https://x.com/shineos_corp" target="_blank" class="text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-white transition-colors">X (Twitter)</a> <a href="https://github.com/Shineos" target="_blank" class="text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-white transition-colors">GitHub</a> <a href="/privacy" class="text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-white transition-colors">Privacy Policy</a> </div> </div> <div class="border-t border-gray-100 dark:border-white/5 py-6 text-center text-gray-400 dark:text-gray-600 text-xs">
+&copy; 2025 Shineos Inc. All rights reserved.
+</div> </footer> </body></html> 
