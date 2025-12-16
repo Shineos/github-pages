@@ -1,0 +1,811 @@
+<!DOCTYPE html><html lang="ja" class="scroll-smooth scroll-pt-24"> <head><meta charset="utf-8"><link rel="icon" type="image/png" href="/pr-preview/22/favicon.png"><meta name="viewport" content="width=device-width"><meta name="generator" content="Astro v5.16.5"><title>LLMの幻覚（Hallucination）対策 - 信頼性の高いAIシステムの構築方法 | Shineos Inc. Tech Blog</title><meta name="description" content="LLMが事実でない情報を生成する「幻覚」問題の原因と対策を徹底解説。RAG、プロンプト設計、検証プロセスなど実践的な手法を紹介します。"><meta property="og:title" content="LLMの幻覚（Hallucination）対策 - 信頼性の高いAIシステムの構築方法"><meta property="og:description" content="LLMが事実でない情報を生成する「幻覚」問題の原因と対策を徹底解説。RAG、プロンプト設計、検証プロセスなど実践的な手法を紹介します。"><meta property="og:image" content="https://blog.shineos.com/images/posts/2025/12/llm-hallucination-prevention/header.webp"><meta property="og:type" content="article"><meta property="og:url" content="https://blog.shineos.com/pr-preview/22/posts/2025-12-14-llm-hallucination-prevention/"><meta name="twitter:card" content="summary_large_image"><script>
+      // Init theme on load
+      if (
+        localStorage.getItem("color-theme") === "dark" ||
+        (!("color-theme" in localStorage) &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches)
+      ) {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+    </script><script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Shineos Inc. Tech Blog","url":"https://blog.shineos.com/"}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","@id":"https://shineos.com/#organization","name":"株式会社シャイオス","alternateName":["シャイオス","Shineos Inc.","Shineos"],"url":"https://shineos.com/","logo":"https://storage.googleapis.com/studio-design-asset-files/projects/nBW2wzvyOv/s-444x108_webp_55d10f20-64d9-4940-ad41-e1a674aed0ad.webp","description":"新たな価値を生み出し、世界に輝き〈Shine〉と革新〈Neos〉を届ける。","address":{"@type":"PostalAddress","streetAddress":"栄町5番1号 横浜クリエーションスクエア 14階","addressLocality":"横浜市神奈川区","addressRegion":"神奈川県","postalCode":"221-0052","addressCountry":"JP"},"contactPoint":{"@type":"ContactPoint","contactType":"customer support","email":"info@shineos.com","url":"https://shineos.com/contact"},"sameAs":["https://twitter.com/shineos_corp","https://www.facebook.com/shineos.corp/","https://www.linkedin.com/company/shineos-corp","https://prtimes.jp/main/html/searchrlp/company_id/95807"]}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":"LLMの幻覚（Hallucination）対策 - 信頼性の高いAIシステムの構築方法","author":{"@type":"Organization","name":"株式会社シャイオス","url":"https://shineos.com"},"datePublished":"2025-12-14","image":"https://blog.shineos.com/images/posts/2025/12/llm-hallucination-prevention/header.webp","articleSection":["LLM","Hallucination","AI信頼性","RAG","プロンプトエンジニアリング"],"articleBody":"## はじめに\n\n大規模言語モデル（LLM）を活用したアプリケーション開発において、最も重要な課題の1つが **幻覚（Hallucination）** です。幻覚とは、LLMが事実と異なる情報を、あたかも正確な情報であるかのように生成してしまう現象を指します。\n\n企業システムや医療、金融などの重要なドメインでLLMを活用する際、この幻覚問題への対策は必須です。本記事では、幻覚が発生する原因から、実務で使える具体的な対策手法まで、体系的に解説します。\n\n**対象読者**: AI/LLMアプリケーション開発者、プロダクトマネージャー、AI活用を検討している技術リーダー\n\n## LLMの幻覚とは？\n\nLLMの幻覚（Hallucination）とは、モデルが学習データに基づかない、または事実と異なる情報を生成する現象です。以下のような形で現れます：\n\n- **事実の捏造**: 存在しない企業名、製品名、統計データを生成\n- **文脈の誤解**: 質問の意図を誤解し、関連性のない回答を提供\n- **時系列の混同**: 古い情報と新しい情報を混同\n- **論理的矛盾**: 自己矛盾した説明や結論\n\n### 幻覚が発生する主な原因\n\n| 原因 | 説明 | 影響度 |\n|------|------|--------|\n| **学習データの限界** | トレーニングデータに含まれない情報への対応 | 高 |\n| **確率的生成** | 次のトークンを確率的に予測する仕組み | 中 |\n| **文脈の理解不足** | 質問の意図や背景を完全に理解できない | 高 |\n| **過度な一般化** | 類似パターンからの不適切な推論 | 中 |\n| **曖昧なプロンプト** | 不明確な指示による誤った解釈 | 高 |\n\n## まとめ\n\n幻覚対策の主要なアプローチを整理します：\n\n| 対策手法 | 概要 | 効果 | 実装難易度 |\n|---------|------|------|-----------|\n| **RAG統合** | 外部知識ベースから関連情報を検索して提供 | 非常に高い | 中 |\n| **プロンプト設計** | 明確な指示と制約を含むプロンプト | 高い | 低 |\n| **出力検証** | 生成された情報を自動的に検証 | 高い | 中 |\n| **ソース引用** | 情報源を明示し、トレーサビリティ確保 | 中 | 低 |\n| **温度パラメータ調整** | 生成の創造性を制限し正確性を向上 | 中 | 低 |\n| **複数モデルの比較** | 複数のLLMの出力を比較検証 | 高い | 高 |\n| **人間によるレビュー** | 重要な出力を人間が確認 | 非常に高い | 低 |\n\n## 幻覚対策の5つの実践的戦略\n\n![幻覚対策の5つの戦略](/images/posts/2025/12/llm-hallucination-prevention/prevention-strategies.webp)\n\n### 戦略1: RAG（検索拡張生成）の統合\n\nRAGは、LLMに外部の信頼できる情報源を提供することで、幻覚を大幅に削減します。\n\n#### 実装例（Python + LangChain）\n\n```python\nfrom langchain.vectorstores import Chroma\nfrom langchain.embeddings import OpenAIEmbeddings\nfrom langchain.chat_models import ChatOpenAI\nfrom langchain.chains import RetrievalQA\n\n# ベクトルデータベースの構築\nembeddings = OpenAIEmbeddings()\nvectorstore = Chroma.from_documents(\n    documents=documents,  # 信頼できる情報源のドキュメント\n    embedding=embeddings\n)\n\n# RAGチェーンの構築\nllm = ChatOpenAI(\n    model=\"gpt-4\",\n    temperature=0  # 正確性重視\n)\n\nqa_chain = RetrievalQA.from_chain_type(\n    llm=llm,\n    chain_type=\"stuff\",\n    retriever=vectorstore.as_retriever(\n        search_kwargs={\"k\": 3}  # 上位3件の関連文書を取得\n    ),\n    return_source_documents=True  # ソース文書も返す\n)\n\n# クエリ実行\nresult = qa_chain({\"query\": \"最新の製品仕様は？\"})\nanswer = result[\"result\"]\nsources = result[\"source_documents\"]\n\n# ソース引用を含む回答生成\nresponse = f\"{answer}\\n\\n参照元:\\n\"\nfor i, doc in enumerate(sources, 1):\n    response += f\"{i}. {doc.metadata['source']}\\n\"\n\nprint(response)\n```\n\n#### RAG実装のベストプラクティス\n\n<MessageCard type=\"important\">\n**RAG実装時の重要ポイント**\n\n1. **高品質なデータソース**: 正確で最新の情報源を使用\n2. **適切なチャンキング**: 文書を適切なサイズに分割（200-500トークン推奨）\n3. **メタデータの活用**: 日付、出典、信頼度などのメタデータを保持\n4. **定期的な更新**: 情報源を定期的に更新してフレッシュネスを保つ\n</MessageCard>\n\n### 戦略2: 効果的なプロンプト設計\n\nプロンプトに明確な制約と指示を含めることで、幻覚を抑制します。\n\n#### 幻覚を減らすプロンプトパターン\n\n```python\n# ❌ 悪い例：曖昧で制約がない\nprompt = \"AIについて教えて\"\n\n# ✅ 良い例：明確な制約と指示\nprompt = \"\"\"\n以下の制約に従って回答してください：\n\n1. 確実な情報のみを提供してください\n2. 不確実な場合は「情報が不足しています」と明示してください\n3. 推測や仮定を述べる場合は、その旨を明記してください\n4. 具体的な数値を述べる場合は、出典を示してください\n\n質問：AI市場の2023年の成長率は？\n\"\"\"\n\nresponse = llm.invoke(prompt)\n```\n\n#### 構造化プロンプトの実装\n\n```python\ndef create_safe_prompt(question: str, context: str = \"\") -> str:\n    \"\"\"幻覚を抑制するための構造化プロンプト生成\"\"\"\n    return f\"\"\"\nあなたは正確性を最優先する情報アシスタントです。\n\n【重要な制約】\n- 確実な情報のみを提供してください\n- わからない場合は「情報がありません」と答えてください\n- 推測する場合は必ず「推測ですが」と前置きしてください\n- 具体的な数値や日付には必ず出典を付けてください\n\n【提供されている情報】\n{context if context else \"情報は提供されていません\"}\n\n【質問】\n{question}\n\n【回答】\n\"\"\"\n\n# 使用例\nsafe_prompt = create_safe_prompt(\n    question=\"当社の2023年の売上は？\",\n    context=\"決算資料によると、2023年度の売上は150億円でした。\"\n)\n\nresponse = llm.invoke(safe_prompt)\n```\n\n### 戦略3: 出力の自動検証\n\nLLMの出力を別のシステムやモデルで検証することで、幻覚を検出します。\n\n#### 事実検証システムの実装\n\n```python\nfrom typing import Dict, List\n\ndef verify_llm_output(\n    output: str,\n    verification_sources: List[str]\n) -> Dict[str, any]:\n    \"\"\"LLMの出力を検証する\"\"\"\n    \n    # 1. 固有名詞や数値を抽出\n    entities = extract_entities(output)\n    \n    # 2. 各エンティティを検証\n    verification_results = []\n    for entity in entities:\n        # データベースや外部APIで検証\n        is_valid = check_against_sources(entity, verification_sources)\n        verification_results.append({\n            \"entity\": entity,\n            \"verified\": is_valid,\n            \"confidence\": calculate_confidence(entity, verification_sources)\n        })\n    \n    # 3. 全体の信頼度スコアを算出\n    overall_confidence = sum(\n        r[\"confidence\"] for r in verification_results\n    ) / len(verification_results)\n    \n    return {\n        \"output\": output,\n        \"entities\": verification_results,\n        \"overall_confidence\": overall_confidence,\n        \"is_trustworthy\": overall_confidence > 0.8\n    }\n\n# 使用例\nllm_response = \"株式会社XYZは2020年に設立され、売上は100億円です。\"\nverification = verify_llm_output(\n    output=llm_response,\n    verification_sources=[\"company_database\", \"financial_reports\"]\n)\n\nif not verification[\"is_trustworthy\"]:\n    print(\"警告: 出力の信頼性が低いため、人間による確認が必要です\")\n```\n\n#### セルフチェックプロンプト\n\n```python\ndef self_verification_chain(question: str) -> dict:\n    \"\"\"LLM自身に回答の検証をさせる\"\"\"\n    \n    # 1. 初回回答生成\n    initial_response = llm.invoke(f\"\"\"\n    質問: {question}\n    \n    できる限り正確に回答してください。\n    \"\"\")\n    \n    # 2. 自己検証\n    verification_prompt = f\"\"\"\n    以下の回答の正確性を評価してください。\n    \n    【質問】\n    {question}\n    \n    【回答】\n    {initial_response}\n    \n    【評価項目】\n    1. 事実の正確性（1-5点）\n    2. 根拠の明確さ（1-5点）\n    3. 不確実性の適切な表現（1-5点）\n    \n    評価とともに、問題点があれば指摘してください。\n    \"\"\"\n    \n    verification = llm.invoke(verification_prompt)\n    \n    # 3. 必要に応じて修正\n    if needs_correction(verification):\n        corrected_response = llm.invoke(f\"\"\"\n        以下の指摘に基づいて回答を修正してください：\n        \n        【元の回答】\n        {initial_response}\n        \n        【指摘事項】\n        {verification}\n        \n        【修正後の回答】\n        \"\"\")\n        return {\n            \"final_answer\": corrected_response,\n            \"verification\": verification,\n            \"corrected\": True\n        }\n    \n    return {\n        \"final_answer\": initial_response,\n        \"verification\": verification,\n        \"corrected\": False\n    }\n```\n\n### 戦略4: ソース引用の徹底\n\n情報源を明示することで、ユーザーが情報の信頼性を判断できるようにします。\n\n#### ソース付き回答の生成\n\n```typescript\ninterface SourcedAnswer {\n    answer: string;\n    sources: Source[];\n    confidence: number;\n}\n\ninterface Source {\n    content: string;\n    url?: string;\n    title: string;\n    relevance_score: number;\n}\n\nasync function generateAnswerWithSources(\n    question: string,\n    documents: Document[]\n): Promise<SourcedAnswer> {\n    // 関連文書を検索\n    const relevantDocs = await searchRelevantDocuments(question, documents);\n    \n    // ソース付きプロンプト生成\n    const prompt = `\n以下の情報源のみを使用して質問に回答してください。\n情報源に記載されていない内容は回答に含めないでください。\n\n【情報源】\n${relevantDocs.map((doc, i) => `\n[${i + 1}] ${doc.title}\n${doc.content}\n`).join('\\n')}\n\n【質問】\n${question}\n\n【回答形式】\n回答の各文の後に、参照した情報源の番号を [1], [2] のように記載してください。\n\n【回答】\n    `;\n    \n    const response = await llm.invoke(prompt);\n    \n    // 引用を解析\n    const citations = extractCitations(response);\n    const citedSources = citations.map(num => relevantDocs[num - 1]);\n    \n    return {\n        answer: response,\n        sources: citedSources,\n        confidence: calculateConfidence(citations, relevantDocs)\n    };\n}\n\n// 使用例\nconst result = await generateAnswerWithSources(\n    \"最新の製品機能は？\",\n    productDocuments\n);\n\nconsole.log(result.answer);\nconsole.log(\"\\n参考資料:\");\nresult.sources.forEach((source, i) => {\n    console.log(`[${i + 1}] ${source.title}`);\n    if (source.url) console.log(`    ${source.url}`);\n});\n```\n\n### 戦略5: パラメータ調整による制御\n\nモデルのパラメータを調整して、正確性と創造性のバランスを取ります。\n\n#### 温度パラメータの最適化\n\n```python\ndef generate_with_optimal_params(\n    prompt: str,\n    task_type: str = \"factual\"\n) -> str:\n    \"\"\"タスクに応じた最適なパラメータでLLMを実行\"\"\"\n    \n    # タスクタイプ別のパラメータ設定\n    param_configs = {\n        \"factual\": {\n            \"temperature\": 0.0,  # 決定的な出力\n            \"top_p\": 0.1,\n            \"frequency_penalty\": 0.0,\n            \"presence_penalty\": 0.0\n        },\n        \"creative\": {\n            \"temperature\": 0.8,\n            \"top_p\": 0.9,\n            \"frequency_penalty\": 0.5,\n            \"presence_penalty\": 0.5\n        },\n        \"balanced\": {\n            \"temperature\": 0.3,\n            \"top_p\": 0.5,\n            \"frequency_penalty\": 0.2,\n            \"presence_penalty\": 0.2\n        }\n    }\n    \n    params = param_configs.get(task_type, param_configs[\"balanced\"])\n    \n    response = client.chat.completions.create(\n        model=\"gpt-4\",\n        messages=[{\"role\": \"user\", \"content\": prompt}],\n        **params\n    )\n    \n    return response.choices[0].message.content\n\n# 使用例\n# 事実ベースの質問には低い温度\nfactual_answer = generate_with_optimal_params(\n    \"2024年の東京オリンピックの開催日は？\",\n    task_type=\"factual\"\n)\n\n# クリエイティブなタスクには高い温度\ncreative_answer = generate_with_optimal_params(\n    \"未来の都市をイメージした物語を書いて\",\n    task_type=\"creative\"\n)\n```\n\n## 実務での幻覚対策フレームワーク\n\n複数の対策を組み合わせた包括的なフレームワークです。\n\n```python\nfrom typing import Dict, Optional\nfrom dataclasses import dataclass\n\n@dataclass\nclass HallucinationPreventionConfig:\n    \"\"\"幻覚防止の設定\"\"\"\n    use_rag: bool = True\n    verify_output: bool = True\n    require_sources: bool = True\n    max_temperature: float = 0.3\n    enable_self_check: bool = True\n    human_review_threshold: float = 0.7\n\nclass SafeLLMWrapper:\n    \"\"\"幻覚対策を組み込んだLLMラッパー\"\"\"\n    \n    def __init__(self, config: HallucinationPreventionConfig):\n        self.config = config\n        self.llm = ChatOpenAI(temperature=config.max_temperature)\n        self.vectorstore = self._setup_vectorstore() if config.use_rag else None\n    \n    def generate(self, question: str) -> Dict[str, any]:\n        \"\"\"安全な回答生成\"\"\"\n        result = {\n            \"question\": question,\n            \"answer\": \"\",\n            \"confidence\": 0.0,\n            \"sources\": [],\n            \"warnings\": [],\n            \"requires_human_review\": False\n        }\n        \n        try:\n            # 1. RAGによる情報取得\n            context = \"\"\n            if self.config.use_rag and self.vectorstore:\n                docs = self.vectorstore.similarity_search(question, k=3)\n                context = \"\\n\".join([doc.page_content for doc in docs])\n                result[\"sources\"] = [doc.metadata for doc in docs]\n            \n            # 2. 構造化プロンプトで回答生成\n            prompt = self._create_safe_prompt(question, context)\n            answer = self.llm.invoke(prompt)\n            result[\"answer\"] = answer\n            \n            # 3. 自己検証\n            if self.config.enable_self_check:\n                verification = self._self_verify(question, answer)\n                result[\"confidence\"] = verification[\"confidence\"]\n                result[\"warnings\"] = verification[\"warnings\"]\n            \n            # 4. 出力検証\n            if self.config.verify_output:\n                is_valid = self._verify_facts(answer, context)\n                if not is_valid:\n                    result[\"warnings\"].append(\"事実確認で矛盾を検出\")\n                    result[\"confidence\"] *= 0.5\n            \n            # 5. 人間レビューの判定\n            if result[\"confidence\"] < self.config.human_review_threshold:\n                result[\"requires_human_review\"] = True\n            \n        except Exception as e:\n            result[\"warnings\"].append(f\"エラー: {str(e)}\")\n            result[\"requires_human_review\"] = True\n        \n        return result\n    \n    def _create_safe_prompt(self, question: str, context: str) -> str:\n        \"\"\"安全なプロンプト生成\"\"\"\n        return f\"\"\"\nあなたは正確性を最優先する専門家です。\n\n【重要な制約】\n1. 提供された情報のみを使用してください\n2. 不確実な場合は明示してください\n3. {(\"情報源を引用してください\" if self.config.require_sources else \"\")}\n\n【提供情報】\n{context if context else \"追加情報なし\"}\n\n【質問】\n{question}\n\"\"\"\n    \n    def _self_verify(self, question: str, answer: str) -> Dict:\n        \"\"\"自己検証を実行\"\"\"\n        # 実装省略\n        return {\"confidence\": 0.85, \"warnings\": []}\n    \n    def _verify_facts(self, answer: str, context: str) -> bool:\n        \"\"\"事実検証を実行\"\"\"\n        # 実装省略\n        return True\n\n# 使用例\nconfig = HallucinationPreventionConfig(\n    use_rag=True,\n    verify_output=True,\n    require_sources=True,\n    max_temperature=0.2,\n    enable_self_check=True,\n    human_review_threshold=0.7\n)\n\nsafe_llm = SafeLLMWrapper(config)\nresult = safe_llm.generate(\"当社の最新製品の仕様は？\")\n\nprint(f\"回答: {result['answer']}\")\nprint(f\"信頼度: {result['confidence']:.2%}\")\nprint(f\"人間レビュー必要: {result['requires_human_review']}\")\n\nif result['warnings']:\n    print(f\"警告: {', '.join(result['warnings'])}\")\n```\n\n## モニタリングと継続的改善\n\n幻覚対策は一度実装して終わりではなく、継続的なモニタリングと改善が必要です。\n\n### 幻覚検出メトリクス\n\n```python\nfrom datetime import datetime\nfrom typing import List\n\nclass HallucinationMonitor:\n    \"\"\"幻覚発生のモニタリング\"\"\"\n    \n    def __init__(self):\n        self.logs = []\n    \n    def log_generation(\n        self,\n        question: str,\n        answer: str,\n        confidence: float,\n        sources: List[str],\n        verification_passed: bool\n    ):\n        \"\"\"生成結果をログ記録\"\"\"\n        self.logs.append({\n            \"timestamp\": datetime.now(),\n            \"question\": question,\n            \"answer\": answer,\n            \"confidence\": confidence,\n            \"sources\": sources,\n            \"verification_passed\": verification_passed\n        })\n    \n    def calculate_metrics(self) -> Dict:\n        \"\"\"メトリクスを計算\"\"\"\n        total = len(self.logs)\n        if total == 0:\n            return {}\n        \n        passed = sum(1 for log in self.logs if log[\"verification_passed\"])\n        avg_confidence = sum(log[\"confidence\"] for log in self.logs) / total\n        \n        return {\n            \"total_generations\": total,\n            \"verification_pass_rate\": passed / total,\n            \"average_confidence\": avg_confidence,\n            \"low_confidence_rate\": sum(\n                1 for log in self.logs if log[\"confidence\"] < 0.7\n            ) / total\n        }\n    \n    def get_suspicious_cases(self, threshold: float = 0.6) -> List[Dict]:\n        \"\"\"疑わしいケースを抽出\"\"\"\n        return [\n            log for log in self.logs\n            if log[\"confidence\"] < threshold or not log[\"verification_passed\"]\n        ]\n\n# 使用例\nmonitor = HallucinationMonitor()\n\n# 各生成時にログ記録\nresult = safe_llm.generate(\"質問内容\")\nmonitor.log_generation(\n    question=\"質問内容\",\n    answer=result[\"answer\"],\n    confidence=result[\"confidence\"],\n    sources=result[\"sources\"],\n    verification_passed=len(result[\"warnings\"]) == 0\n)\n\n# 定期的にメトリクスを確認\nmetrics = monitor.calculate_metrics()\nprint(f\"検証通過率: {metrics['verification_pass_rate']:.2%}\")\nprint(f\"平均信頼度: {metrics['average_confidence']:.2%}\")\n\n# 疑わしいケースをレビュー\nsuspicious = monitor.get_suspicious_cases()\nfor case in suspicious:\n    print(f\"要確認: {case['question']}\")\n```\n\n## よくある質問\n\n### 幻覚を完全に防ぐことはできますか？\n\n現在の技術では、LLMの幻覚を100%防ぐことは困難です。しかし、本記事で紹介した対策を組み合わせることで、幻覚の発生率を大幅に削減できます。\n\n重要なのは、完全に防ぐことを目指すのではなく、以下のアプローチを取ることです：\n\n1. **幻覚のリスクを最小化**：RAGやプロンプト設計で発生率を下げる\n2. **幻覚を検出**：自動検証や人間レビューで検出\n3. **影響を限定**：ソース引用により、ユーザーが判断できるようにする\n\n### RAGを使えば幻覚は発生しませんか？\n\nいいえ、RAGを使用しても幻覚は完全には防げません。以下の理由があります：\n\n- 検索された情報が不完全または関連性が低い場合\n- LLMが検索結果を誤解釈する場合\n- 複数の情報源から誤った統合をする場合\n\n<MessageCard type=\"warning\">\nRAGは幻覚を大幅に削減しますが、万能ではありません。検索品質の向上と、出力検証の組み合わせが重要です。\n</MessageCard>\n\n### 温度パラメータを0にすれば安全ですか？\n\n温度を0に設定すると、出力はより決定的になり、幻覚のリスクは減少しますが、以下の問題があります：\n\n- **柔軟性の低下**：同じ入力に対して常に同じ出力\n- **創造性の欠如**：文章が硬く、不自然になる場合がある\n- **完全な保証はない**：温度0でも幻覚は発生する可能性がある\n\n推奨される設定：\n\n- **事実ベースのタスク**：温度 0.0 〜 0.2\n- **バランス型**：温度 0.3 〜 0.5\n- **クリエイティブタスク**：温度 0.6 〜 0.9\n\n### どの対策が最も効果的ですか？\n\nタスクの種類によって最適な対策は異なりますが、一般的には以下の優先順位が推奨されます：\n\n1. **RAG統合**（最も効果的）：信頼できる情報源を提供\n2. **プロンプト設計**：実装が容易で即効性がある\n3. **出力検証**：追加の安全層として機能\n4. **ソース引用**：透明性を確保\n5. **パラメータ調整**：補助的な対策\n\n実務では、これらを **組み合わせて使用** することが最も効果的です。\n\n## おわりに\n\nLLMの幻覚問題は、AI活用における最も重要な課題の1つです。本記事で紹介した対策を実装することで、信頼性の高いLLMアプリケーションを構築できます。\n\n重要なポイントは以下の通りです：\n\n- **多層防御**：複数の対策を組み合わせる\n- **継続的監視**：幻覚の発生を検出し、改善を続ける\n- **透明性**：情報源を明示し、ユーザーが判断できるようにする\n- **人間の関与**：重要な判断には人間のレビューを入れる\n\n次のステップとして、以下の学習をお勧めします：\n\n- **RAGの高度な実装**：ハイブリッド検索、リランキング、クエリ拡張\n- **評価フレームワーク**：幻覚検出の自動評価システム\n- **ファインチューニング**：特定ドメインでの精度向上\n\n私たちShineosでは、信頼性の高いAIシステムの構築を支援しています。幻覚対策を含むLLMアプリケーション開発にご興味がある方は、ぜひお問い合わせください。\n\n## 参考リンク\n\n- [OpenAI - Reducing Hallucinations](https://platform.openai.com/docs/guides/safety-best-practices)\n- [Google - Grounding with Gemini](https://ai.google.dev/gemini-api/docs/grounding)\n- [LangChain - RAG Best Practices](https://python.langchain.com/docs/use_cases/question_answering/)\n- [Anthropic - Reducing Hallucinations in Claude](https://docs.anthropic.com/claude/docs/reducing-hallucinations)","url":"https://blog.shineos.com/pr-preview/22/posts/2025-12-14-llm-hallucination-prevention/","publisher":{"@type":"Organization","name":"株式会社シャイオス","url":"https://shineos.com","logo":{"@type":"ImageObject","url":"https://shineos.com/logo.png"}}}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"幻覚を完全に防ぐことはできますか？","acceptedAnswer":{"@type":"Answer","text":"現在の技術では、LLMの幻覚を100%防ぐことは困難です。しかし、本記事で紹介した対策を組み合わせることで、幻覚の発生率を大幅に削減できます。\n\n重要なのは、完全に防ぐことを目指すのではなく、以下のアプローチを取ることです：\n\n1. **幻覚のリスクを最小化**：RAGやプロンプト設計で発生率を下げる\n2. **幻覚を検出**：自動検証や人間レビューで検出\n3. **影響を限定**：ソース引用により、ユーザーが判断できるようにする"}},{"@type":"Question","name":"RAGを使えば幻覚は発生しませんか？","acceptedAnswer":{"@type":"Answer","text":"いいえ、RAGを使用しても幻覚は完全には防げません。以下の理由があります：\n\n- 検索された情報が不完全または関連性が低い場合\n- LLMが検索結果を誤解釈する場合\n- 複数の情報源から誤った統合をする場合\n\n<MessageCard type=\"warning\">\nRAGは幻覚を大幅に削減しますが、万能ではありません。検索品質の向上と、出力検証の組み合わせが重要です。\n</MessageCard>"}},{"@type":"Question","name":"温度パラメータを0にすれば安全ですか？","acceptedAnswer":{"@type":"Answer","text":"温度を0に設定すると、出力はより決定的になり、幻覚のリスクは減少しますが、以下の問題があります：\n\n- **柔軟性の低下**：同じ入力に対して常に同じ出力\n- **創造性の欠如**：文章が硬く、不自然になる場合がある\n- **完全な保証はない**：温度0でも幻覚は発生する可能性がある\n\n推奨される設定：\n\n- **事実ベースのタスク**：温度 0.0 〜 0.2\n- **バランス型**：温度 0.3 〜 0.5\n- **クリエイティブタスク**：温度 0.6 〜 0.9"}},{"@type":"Question","name":"どの対策が最も効果的ですか？","acceptedAnswer":{"@type":"Answer","text":"タスクの種類によって最適な対策は異なりますが、一般的には以下の優先順位が推奨されます：\n\n1. **RAG統合**（最も効果的）：信頼できる情報源を提供\n2. **プロンプト設計**：実装が容易で即効性がある\n3. **出力検証**：追加の安全層として機能\n4. **ソース引用**：透明性を確保\n5. **パラメータ調整**：補助的な対策\n\n実務では、これらを **組み合わせて使用** することが最も効果的です。"}}]}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"ホーム","item":"https://blog.shineos.com/pr-preview/22"},{"@type":"ListItem","position":2,"name":"記事一覧","item":"https://blog.shineos.com/pr-preview/22/archives/1"},{"@type":"ListItem","position":3,"name":"LLMの幻覚（Hallucination）対策 - 信頼性の高いAIシステムの構築方法","item":"https://blog.shineos.com/pr-preview/22/posts/2025-12-14-llm-hallucination-prevention/"}]}</script><!-- Google tag (gtag.js) --><script async src="https://www.googletagmanager.com/gtag/js?id=G-L9J411DHVF"></script><script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag("js", new Date());
+
+      gtag("config", "G-L9J411DHVF");
+    </script><link rel="stylesheet" href="/pr-preview/22/_astro/about.BAu_G_kw.css">
+<style>.pagefind-ui__search-input{background-color:transparent!important;border:1px solid #e5e7eb!important;color:#111827!important;border-radius:.5rem!important;font-size:.875rem!important;text-align:left!important}.dark .pagefind-ui__search-input{border-color:#ffffff1a!important;color:#fff!important}.pagefind-ui__drawer{position:absolute!important;left:0!important;right:0!important;width:100%!important;z-index:9999!important;background-color:#fffffffa!important;backdrop-filter:blur(12px);border:1px solid #e5e7eb;border-radius:.5rem;margin-top:.5rem;max-height:50vh!important;overflow-y:scroll!important;overscroll-behavior:contain;box-shadow:0 20px 25px -5px #0000001a,0 10px 10px -5px #0000000a;scrollbar-width:thin;scrollbar-color:#94a3b8 #f1f5f9;-webkit-overflow-scrolling:touch}.dark .pagefind-ui__drawer{background-color:#0f172afa!important;border-color:#ffffff1a;box-shadow:0 20px 25px -5px #00000080;scrollbar-color:#64748b #1e293b}.pagefind-ui__drawer::-webkit-scrollbar{width:10px!important;display:block!important}.pagefind-ui__drawer::-webkit-scrollbar-track{background:#f1f5f9!important;border-radius:0 .5rem .5rem 0}.dark .pagefind-ui__drawer::-webkit-scrollbar-track{background:#1e293b!important}.pagefind-ui__drawer::-webkit-scrollbar-thumb{background-color:#94a3b8!important;border-radius:20px;border:2px solid #f1f5f9!important}.dark .pagefind-ui__drawer::-webkit-scrollbar-thumb{background-color:#64748b!important;border-color:#1e293b!important}.pagefind-ui__drawer::-webkit-scrollbar-thumb:hover{background-color:#64748b!important;cursor:pointer}.dark .pagefind-ui__drawer::-webkit-scrollbar-thumb:hover{background-color:#94a3b8!important}.pagefind-ui__result{padding:0 1rem!important;font-size:.9rem!important}.pagefind-ui__result-link{color:#2563eb!important}.dark .pagefind-ui__result-link{color:#3b82f6!important}.pagefind-ui__result-excerpt{color:#4b5563!important}.dark .pagefind-ui__result-excerpt{color:#9ca3af!important}.pagefind-ui__message{color:#6b7280!important;padding-left:1rem!important}.dark .pagefind-ui__message{color:#9ca3af!important}.dark .pagefind-ui__search-clear{background-color:transparent!important;color:#e2e8f0!important}
+</style>
+<link rel="stylesheet" href="/pr-preview/22/_astro/_slug_.DUrD4dIZ.css"></head> <body class="bg-gray-50 text-gray-900 dark:bg-shineos-950 dark:text-slate-200 min-h-screen flex flex-col font-sans antialiased selection:bg-blue-100 selection:text-blue-900 dark:selection:bg-shineos-brand/30 dark:selection:text-white overflow-x-hidden transition-colors duration-300"> <!-- Background Decor (Dark Mode Only) --> <div class="fixed inset-0 z-0 pointer-events-none hidden dark:block"> <div class="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-shineos-brand/20 blur-[120px] rounded-full mix-blend-screen opacity-40"></div> <div class="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-shineos-cyan/20 blur-[120px] rounded-full mix-blend-screen opacity-40"></div> </div> <!-- Background Decor (Light Mode) --> <div class="fixed inset-0 z-0 pointer-events-none dark:hidden"> <div class="absolute top-0 right-0 w-[50%] h-[50%] bg-blue-100/40 blur-[100px] rounded-full opacity-60"></div> </div> <header id="main-header" class="fixed w-full top-0 z-50 transition-all duration-300 border-b border-gray-200 dark:border-white/5 bg-white/80 dark:bg-shineos-950/70 backdrop-blur-xl supports-[backdrop-filter]:bg-white/60 dark:supports-[backdrop-filter]:bg-shineos-950/60" data-astro-cid-3ef6ksr2> <div class="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between" data-astro-cid-3ef6ksr2> <a href="/pr-preview/22" class="group flex items-center gap-2 relative z-50" data-astro-cid-3ef6ksr2> <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 dark:from-shineos-brand dark:to-shineos-cyan flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-blue-500/20 dark:shadow-shineos-brand/20 transition-all" data-astro-cid-3ef6ksr2>
+S
+</div> <span class="text-lg font-bold text-gray-900 dark:text-white tracking-tight" data-astro-cid-3ef6ksr2>Shineos Tech Blog</span> </a> <div class="flex items-center gap-4" data-astro-cid-3ef6ksr2> <nav class="hidden md:block" data-astro-cid-3ef6ksr2> <ul class="flex space-x-8 text-sm font-medium text-gray-600 dark:text-gray-400" data-astro-cid-3ef6ksr2> <li data-astro-cid-3ef6ksr2> <a href="/pr-preview/22" class="hover:text-blue-600 dark:hover:text-white transition-colors" data-astro-cid-3ef6ksr2>ホーム</a> </li> <li data-astro-cid-3ef6ksr2> <a href="/pr-preview/22/archives/1" class="hover:text-blue-600 dark:hover:text-white transition-colors" data-astro-cid-3ef6ksr2>記事一覧</a> </li> <li data-astro-cid-3ef6ksr2> <a href="/pr-preview/22/about" class="hover:text-blue-600 dark:hover:text-white transition-colors" data-astro-cid-3ef6ksr2>私たちについて</a> </li> <li data-astro-cid-3ef6ksr2> <a href="https://shineos.com" target="_blank" rel="noopener noreferrer" class="hover:text-blue-600 dark:hover:text-white transition-colors flex items-center gap-1" data-astro-cid-3ef6ksr2>
+コーポレート
+<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" data-astro-cid-3ef6ksr2><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" data-astro-cid-3ef6ksr2></path></svg> </a> </li> </ul> </nav> <div class="relative z-50 flex items-center gap-4" data-astro-cid-3ef6ksr2> <button id="theme-toggle" type="button" class="relative w-14 h-8 bg-gray-200 dark:bg-gray-700 rounded-full focus:outline-none focus:ring-4 focus:ring-gray-200 dark:focus:ring-gray-700 transition-colors duration-300 ease-in-out" aria-label="Toggle Theme"> <span id="theme-toggle-thumb" class="absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transform transition-transform duration-300 ease-in-out flex items-center justify-center"> <!-- Sun Icon (Light Mode) --> <svg id="theme-toggle-light-icon" class="w-4 h-4 text-orange-400" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"> <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" fill-rule="evenodd" clip-rule="evenodd"></path> </svg> <!-- Moon Icon (Dark Mode) --> <svg id="theme-toggle-dark-icon" class="hidden w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"> <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path> </svg> </span> </button> <script>
+    const themeToggleBtn = document.getElementById("theme-toggle");
+    const themeToggleThumb = document.getElementById("theme-toggle-thumb");
+    const themeToggleDarkIcon = document.getElementById(
+        "theme-toggle-dark-icon",
+    );
+    const themeToggleLightIcon = document.getElementById(
+        "theme-toggle-light-icon",
+    );
+
+    // Function to update UI based on theme
+    const updateThemeUI = (isDark) => {
+        if (isDark) {
+            themeToggleThumb.classList.add("translate-x-6");
+            themeToggleLightIcon.classList.add("hidden");
+            themeToggleDarkIcon.classList.remove("hidden");
+        } else {
+            themeToggleThumb.classList.remove("translate-x-6");
+            themeToggleLightIcon.classList.remove("hidden");
+            themeToggleDarkIcon.classList.add("hidden");
+        }
+    };
+
+    // Initial check
+    if (
+        localStorage.getItem("color-theme") === "dark" ||
+        (!("color-theme" in localStorage) &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches)
+    ) {
+        updateThemeUI(true);
+    } else {
+        updateThemeUI(false);
+    }
+
+    // Event Listener
+    themeToggleBtn.addEventListener("click", function () {
+        const isDark = document.documentElement.classList.contains("dark");
+
+        // Toggle theme
+        if (isDark) {
+            document.documentElement.classList.remove("dark");
+            localStorage.setItem("color-theme", "light");
+            updateThemeUI(false);
+        } else {
+            document.documentElement.classList.add("dark");
+            localStorage.setItem("color-theme", "dark");
+            updateThemeUI(true);
+        }
+    });
+</script> <!-- Mobile Menu Button --> <button id="mobile-menu-btn" class="md:hidden p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition-colors" aria-label="Menu" data-astro-cid-3ef6ksr2> <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" data-astro-cid-3ef6ksr2> <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" data-astro-cid-3ef6ksr2></path> </svg> </button> </div> </div> </div> <!-- Mobile Menu Overlay --> <div id="mobile-menu" class="fixed inset-0 bg-white dark:bg-shineos-950 z-40 opacity-0 invisible transition-all duration-300 md:hidden flex flex-col pt-24 px-6" data-astro-cid-3ef6ksr2> <nav class="flex flex-col space-y-6 text-lg font-medium text-gray-900 dark:text-white" data-astro-cid-3ef6ksr2> <a href="/pr-preview/22" class="mobile-link py-2 border-b border-gray-100 dark:border-white/5" data-astro-cid-3ef6ksr2>ホーム</a> <a href="/pr-preview/22/archives/1" class="mobile-link py-2 border-b border-gray-100 dark:border-white/5" data-astro-cid-3ef6ksr2>記事一覧</a> <a href="/pr-preview/22/about" class="mobile-link py-2 border-b border-gray-100 dark:border-white/5" data-astro-cid-3ef6ksr2>私たちについて</a> <a href="https://shineos.com" target="_blank" rel="noopener noreferrer" class="mobile-link py-2 border-b border-gray-100 dark:border-white/5 flex items-center justify-between" data-astro-cid-3ef6ksr2>
+コーポレート
+<svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" data-astro-cid-3ef6ksr2><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" data-astro-cid-3ef6ksr2></path></svg> </a> </nav> </div> </header>  <script type="module">const o=document.getElementById("mobile-menu-btn"),e=document.getElementById("mobile-menu"),i=document.querySelectorAll(".mobile-link");let s=!1;o&&e&&(o.addEventListener("click",()=>{s=!s,s?(e.classList.remove("opacity-0","invisible"),e.classList.add("opacity-100","visible"),document.body.classList.add("menu-open"),o.innerHTML='<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>',document.body.style.overflow="hidden"):(e.classList.remove("opacity-100","visible"),e.classList.add("opacity-0","invisible"),document.body.classList.remove("menu-open"),o.innerHTML='<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>',document.body.style.overflow="")}),i.forEach(n=>{n.addEventListener("click",()=>{s=!1,e.classList.remove("opacity-100","visible"),e.classList.add("opacity-0","invisible"),document.body.classList.remove("menu-open"),o.innerHTML='<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>',document.body.style.overflow=""})}));</script> <div class="h-16" data-astro-cid-3ef6ksr2></div> <!-- Spacer for fixed header --> <main class="flex-grow max-w-7xl mx-auto px-6 py-12 w-full relative z-10">   <div class="max-w-[1600px] mx-auto px-4 lg:px-0 mb-4"> <nav class="flex text-sm text-gray-500 dark:text-gray-400 mb-6 overflow-x-auto whitespace-nowrap pb-2" aria-label="Breadcrumb"> <ol class="inline-flex items-center space-x-1 md:space-x-3"> <li class="inline-flex items-center"> <a href="/pr-preview/22" class="inline-flex items-center hover:text-blue-600 dark:hover:text-white transition-colors"> <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path></svg>
+ホーム
+</a> </li> <li> <div class="flex items-center"> <svg class="w-6 h-6 text-gray-400" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"> <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path> </svg> <a href="/pr-preview/22/archives/1" class="ml-1 hover:text-blue-600 dark:hover:text-white md:ml-2 transition-colors"> 記事一覧 </a> </div> </li><li> <div class="flex items-center"> <svg class="w-6 h-6 text-gray-400" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"> <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path> </svg> <span class="ml-1 text-gray-700 dark:text-gray-200 font-medium md:ml-2"> LLMの幻覚（Hallucination）対策 - 信頼性の高いAIシステムの構築方法 </span> </div> </li> </ol> </nav> </div> <div class="grid md:grid-cols-[1fr_300px] gap-8 max-w-[1600px] mx-auto px-4 lg:px-0"> <!-- Main Content Column --> <main class="min-w-0"> <article class="bg-white dark:bg-shineos-900 rounded-3xl p-6 lg:p-10 shadow-sm border border-gray-100 dark:border-white/5"> <!-- Article Header --> <header class="mb-12 text-center md:text-left"> <!-- Header Image (Top of Article) --> <div class="mb-8 rounded-2xl overflow-hidden shadow-md aspect-video w-full bg-gray-100 dark:bg-shineos-800"> <img src="/pr-preview/22/images/posts/2025/12/llm-hallucination-prevention/header.webp" alt="LLMの幻覚（Hallucination）対策 - 信頼性の高いAIシステムの構築方法" class="w-full h-full object-cover"> </div> <h1 class="text-3xl md:text-4xl font-extrabold mb-6 text-gray-900 dark:text-white leading-tight tracking-tight" data-pagefind-weight="10"> LLMの幻覚（Hallucination）対策 - 信頼性の高いAIシステムの構築方法 </h1> <div class="flex flex-wrap items-center gap-4 text-gray-500 dark:text-gray-400 text-sm mb-6">  <time datetime="2025-12-14T00:00:00.000Z" class="flex items-center gap-1 font-mono"> <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg> 2025.12.14 </time> <span class="text-gray-300 dark:text-gray-600">|</span> <span class="flex items-center gap-1"> Shineos Dev Team </span> </div> <div class="flex flex-wrap gap-2 mb-6"> <a href="/pr-preview/22/tags/LLM" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs font-bold rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors">
+#LLM </a><a href="/pr-preview/22/tags/Hallucination" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs font-bold rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors">
+#Hallucination </a><a href="/pr-preview/22/tags/AI信頼性" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs font-bold rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors">
+#AI信頼性 </a><a href="/pr-preview/22/tags/RAG" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs font-bold rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors">
+#RAG </a><a href="/pr-preview/22/tags/プロンプトエンジニアリング" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs font-bold rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors">
+#プロンプトエンジニアリング </a> </div> <div> <div class="flex items-center space-x-4"> <span class="text-sm font-bold text-gray-500">Share:</span> <a href="https://twitter.com/intent/tweet?text=LLM%E3%81%AE%E5%B9%BB%E8%A6%9A%EF%BC%88Hallucination%EF%BC%89%E5%AF%BE%E7%AD%96%20-%20%E4%BF%A1%E9%A0%BC%E6%80%A7%E3%81%AE%E9%AB%98%E3%81%84AI%E3%82%B7%E3%82%B9%E3%83%86%E3%83%A0%E3%81%AE%E6%A7%8B%E7%AF%89%E6%96%B9%E6%B3%95&url=https%3A%2F%2Fblog.shineos.com%2Fpr-preview%2F22%2Fposts%2F2025-12-14-llm-hallucination-prevention%2F" target="_blank" rel="noopener noreferrer" class="p-2 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors" aria-label="Share on X"> <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path></svg> </a> <a href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fblog.shineos.com%2Fpr-preview%2F22%2Fposts%2F2025-12-14-llm-hallucination-prevention%2F" target="_blank" rel="noopener noreferrer" class="p-2 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors" aria-label="Share on LinkedIn"> <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M20.5 2h-17A1.5 1.5 0 002 3.5v17A1.5 1.5 0 003.5 22h17a1.5 1.5 0 001.5-1.5v-17A1.5 1.5 0 0020.5 2zM8 19H5v-9h3zM6.5 8.25A1.75 1.75 0 118.3 6.5a1.78 1.78 0 01-1.8 1.75zM19 19h-3v-4.74c0-1.42-.6-1.93-1.38-1.93A1.74 1.74 0 0013 14.19V19h-3v-9h2.9v1.3a3.11 3.11 0 012.7-1.4c1.55 0 3.36.86 3.36 3.66z"></path></svg> </a> </div> </div> </header> <!-- Article Content --> <div class="prose prose-slate dark:prose-invert max-w-none
+                prose-h2:text-2xl prose-h2:font-bold prose-h2:mt-12 prose-h2:mb-6 prose-h2:pb-2 prose-h2:border-b prose-h2:border-gray-200 dark:prose-h2:border-slate-700
+                prose-h3:text-xl prose-h3:font-bold prose-h3:mt-8 prose-h3:mb-4
+                prose-p:leading-8 prose-p:text-slate-700 dark:prose-p:text-slate-200
+                prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline
+                prose-img:rounded-xl prose-img:shadow-md
+                custom-prose" data-pagefind-body> <h2 id="はじめに">はじめに</h2>
+<p>大規模言語モデル（LLM）を活用したアプリケーション開発において、最も重要な課題の1つが <strong>幻覚（Hallucination）</strong> です。幻覚とは、LLMが事実と異なる情報を、あたかも正確な情報であるかのように生成してしまう現象を指します。</p>
+<p>企業システムや医療、金融などの重要なドメインでLLMを活用する際、この幻覚問題への対策は必須です。本記事では、幻覚が発生する原因から、実務で使える具体的な対策手法まで、体系的に解説します。</p>
+<p><strong>対象読者</strong>: AI/LLMアプリケーション開発者、プロダクトマネージャー、AI活用を検討している技術リーダー</p>
+<h2 id="llmの幻覚とは">LLMの幻覚とは？</h2>
+<p>LLMの幻覚（Hallucination）とは、モデルが学習データに基づかない、または事実と異なる情報を生成する現象です。以下のような形で現れます：</p>
+<ul>
+<li><strong>事実の捏造</strong>: 存在しない企業名、製品名、統計データを生成</li>
+<li><strong>文脈の誤解</strong>: 質問の意図を誤解し、関連性のない回答を提供</li>
+<li><strong>時系列の混同</strong>: 古い情報と新しい情報を混同</li>
+<li><strong>論理的矛盾</strong>: 自己矛盾した説明や結論</li>
+</ul>
+<h3 id="幻覚が発生する主な原因">幻覚が発生する主な原因</h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>原因</th><th>説明</th><th>影響度</th></tr></thead><tbody><tr><td><strong>学習データの限界</strong></td><td>トレーニングデータに含まれない情報への対応</td><td>高</td></tr><tr><td><strong>確率的生成</strong></td><td>次のトークンを確率的に予測する仕組み</td><td>中</td></tr><tr><td><strong>文脈の理解不足</strong></td><td>質問の意図や背景を完全に理解できない</td><td>高</td></tr><tr><td><strong>過度な一般化</strong></td><td>類似パターンからの不適切な推論</td><td>中</td></tr><tr><td><strong>曖昧なプロンプト</strong></td><td>不明確な指示による誤った解釈</td><td>高</td></tr></tbody></table>
+<h2 id="まとめ">まとめ</h2>
+<p>幻覚対策の主要なアプローチを整理します：</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>対策手法</th><th>概要</th><th>効果</th><th>実装難易度</th></tr></thead><tbody><tr><td><strong>RAG統合</strong></td><td>外部知識ベースから関連情報を検索して提供</td><td>非常に高い</td><td>中</td></tr><tr><td><strong>プロンプト設計</strong></td><td>明確な指示と制約を含むプロンプト</td><td>高い</td><td>低</td></tr><tr><td><strong>出力検証</strong></td><td>生成された情報を自動的に検証</td><td>高い</td><td>中</td></tr><tr><td><strong>ソース引用</strong></td><td>情報源を明示し、トレーサビリティ確保</td><td>中</td><td>低</td></tr><tr><td><strong>温度パラメータ調整</strong></td><td>生成の創造性を制限し正確性を向上</td><td>中</td><td>低</td></tr><tr><td><strong>複数モデルの比較</strong></td><td>複数のLLMの出力を比較検証</td><td>高い</td><td>高</td></tr><tr><td><strong>人間によるレビュー</strong></td><td>重要な出力を人間が確認</td><td>非常に高い</td><td>低</td></tr></tbody></table>
+<h2 id="幻覚対策の5つの実践的戦略">幻覚対策の5つの実践的戦略</h2>
+<p><img src="/images/posts/2025/12/llm-hallucination-prevention/prevention-strategies.webp" alt="幻覚対策の5つの戦略"/></p>
+<h3 id="戦略1-rag検索拡張生成の統合">戦略1: RAG（検索拡張生成）の統合</h3>
+<p>RAGは、LLMに外部の信頼できる情報源を提供することで、幻覚を大幅に削減します。</p>
+<h4 id="実装例python--langchain">実装例（Python + LangChain）</h4>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="python"><code><span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> langchain.vectorstores </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> Chroma</span></span>
+<span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> langchain.embeddings </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> OpenAIEmbeddings</span></span>
+<span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> langchain.chat_models </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> ChatOpenAI</span></span>
+<span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> langchain.chains </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> RetrievalQA</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># ベクトルデータベースの構築</span></span>
+<span class="line"><span style="color:#E1E4E8">embeddings </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> OpenAIEmbeddings()</span></span>
+<span class="line"><span style="color:#E1E4E8">vectorstore </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> Chroma.from_documents(</span></span>
+<span class="line"><span style="color:#FFAB70">    documents</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">documents,  </span><span style="color:#6A737D"># 信頼できる情報源のドキュメント</span></span>
+<span class="line"><span style="color:#FFAB70">    embedding</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">embeddings</span></span>
+<span class="line"><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># RAGチェーンの構築</span></span>
+<span class="line"><span style="color:#E1E4E8">llm </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> ChatOpenAI(</span></span>
+<span class="line"><span style="color:#FFAB70">    model</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">&quot;gpt-4&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">    temperature</span><span style="color:#F97583">=</span><span style="color:#79B8FF">0</span><span style="color:#6A737D">  # 正確性重視</span></span>
+<span class="line"><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">qa_chain </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> RetrievalQA.from_chain_type(</span></span>
+<span class="line"><span style="color:#FFAB70">    llm</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">llm,</span></span>
+<span class="line"><span style="color:#FFAB70">    chain_type</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">&quot;stuff&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">    retriever</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">vectorstore.as_retriever(</span></span>
+<span class="line"><span style="color:#FFAB70">        search_kwargs</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">{</span><span style="color:#9ECBFF">&quot;k&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">3</span><span style="color:#E1E4E8">}  </span><span style="color:#6A737D"># 上位3件の関連文書を取得</span></span>
+<span class="line"><span style="color:#E1E4E8">    ),</span></span>
+<span class="line"><span style="color:#FFAB70">    return_source_documents</span><span style="color:#F97583">=</span><span style="color:#79B8FF">True</span><span style="color:#6A737D">  # ソース文書も返す</span></span>
+<span class="line"><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># クエリ実行</span></span>
+<span class="line"><span style="color:#E1E4E8">result </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> qa_chain({</span><span style="color:#9ECBFF">&quot;query&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;最新の製品仕様は？&quot;</span><span style="color:#E1E4E8">})</span></span>
+<span class="line"><span style="color:#E1E4E8">answer </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> result[</span><span style="color:#9ECBFF">&quot;result&quot;</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#E1E4E8">sources </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> result[</span><span style="color:#9ECBFF">&quot;source_documents&quot;</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># ソース引用を含む回答生成</span></span>
+<span class="line"><span style="color:#E1E4E8">response </span><span style="color:#F97583">=</span><span style="color:#F97583"> f</span><span style="color:#9ECBFF">&quot;</span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">answer</span><span style="color:#79B8FF">}\n\n</span><span style="color:#9ECBFF">参照元:</span><span style="color:#79B8FF">\n</span><span style="color:#9ECBFF">&quot;</span></span>
+<span class="line"><span style="color:#F97583">for</span><span style="color:#E1E4E8"> i, doc </span><span style="color:#F97583">in</span><span style="color:#79B8FF"> enumerate</span><span style="color:#E1E4E8">(sources, </span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">):</span></span>
+<span class="line"><span style="color:#E1E4E8">    response </span><span style="color:#F97583">+=</span><span style="color:#F97583"> f</span><span style="color:#9ECBFF">&quot;</span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">i</span><span style="color:#79B8FF">}</span><span style="color:#9ECBFF">. </span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">doc.metadata[</span><span style="color:#9ECBFF">&#39;source&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#79B8FF">}\n</span><span style="color:#9ECBFF">&quot;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#79B8FF">print</span><span style="color:#E1E4E8">(response)</span></span></code></pre>
+<h4 id="rag実装のベストプラクティス">RAG実装のベストプラクティス</h4>
+<div class="flex items-start gap-4 p-6 rounded-xl border my-8 shadow-sm bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800 text-orange-800 dark:text-orange-200" role="alert"> <div class="flex-shrink-0 w-8 h-8 text-orange-600 dark:text-orange-400"> <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="w-8 h-8"> <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /> </svg> </div> <div class="prose prose-base dark:prose-invert max-w-none prose-p:my-0 prose-ul:my-0 prose-ol:my-0 w-full"> <p><strong>RAG実装時の重要ポイント</strong></p><ol>
+<li><strong>高品質なデータソース</strong>: 正確で最新の情報源を使用</li>
+<li><strong>適切なチャンキング</strong>: 文書を適切なサイズに分割（200-500トークン推奨）</li>
+<li><strong>メタデータの活用</strong>: 日付、出典、信頼度などのメタデータを保持</li>
+<li><strong>定期的な更新</strong>: 情報源を定期的に更新してフレッシュネスを保つ</li>
+</ol> </div> </div>
+<h3 id="戦略2-効果的なプロンプト設計">戦略2: 効果的なプロンプト設計</h3>
+<p>プロンプトに明確な制約と指示を含めることで、幻覚を抑制します。</p>
+<h4 id="幻覚を減らすプロンプトパターン">幻覚を減らすプロンプトパターン</h4>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="python"><code><span class="line"><span style="color:#6A737D"># ❌ 悪い例：曖昧で制約がない</span></span>
+<span class="line"><span style="color:#E1E4E8">prompt </span><span style="color:#F97583">=</span><span style="color:#9ECBFF"> &quot;AIについて教えて&quot;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># ✅ 良い例：明確な制約と指示</span></span>
+<span class="line"><span style="color:#E1E4E8">prompt </span><span style="color:#F97583">=</span><span style="color:#9ECBFF"> &quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#9ECBFF">以下の制約に従って回答してください：</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">1. 確実な情報のみを提供してください</span></span>
+<span class="line"><span style="color:#9ECBFF">2. 不確実な場合は「情報が不足しています」と明示してください</span></span>
+<span class="line"><span style="color:#9ECBFF">3. 推測や仮定を述べる場合は、その旨を明記してください</span></span>
+<span class="line"><span style="color:#9ECBFF">4. 具体的な数値を述べる場合は、出典を示してください</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">質問：AI市場の2023年の成長率は？</span></span>
+<span class="line"><span style="color:#9ECBFF">&quot;&quot;&quot;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">response </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> llm.invoke(prompt)</span></span></code></pre>
+<h4 id="構造化プロンプトの実装">構造化プロンプトの実装</h4>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="python"><code><span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> create_safe_prompt</span><span style="color:#E1E4E8">(question: </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">, context: </span><span style="color:#79B8FF">str</span><span style="color:#F97583"> =</span><span style="color:#9ECBFF"> &quot;&quot;</span><span style="color:#E1E4E8">) -&gt; </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;幻覚を抑制するための構造化プロンプト生成&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#F97583"> f</span><span style="color:#9ECBFF">&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#9ECBFF">あなたは正確性を最優先する情報アシスタントです。</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">【重要な制約】</span></span>
+<span class="line"><span style="color:#9ECBFF">- 確実な情報のみを提供してください</span></span>
+<span class="line"><span style="color:#9ECBFF">- わからない場合は「情報がありません」と答えてください</span></span>
+<span class="line"><span style="color:#9ECBFF">- 推測する場合は必ず「推測ですが」と前置きしてください</span></span>
+<span class="line"><span style="color:#9ECBFF">- 具体的な数値や日付には必ず出典を付けてください</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">【提供されている情報】</span></span>
+<span class="line"><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">context </span><span style="color:#F97583">if</span><span style="color:#E1E4E8"> context </span><span style="color:#F97583">else</span><span style="color:#9ECBFF"> &quot;情報は提供されていません&quot;</span><span style="color:#79B8FF">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">【質問】</span></span>
+<span class="line"><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">question</span><span style="color:#79B8FF">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">【回答】</span></span>
+<span class="line"><span style="color:#9ECBFF">&quot;&quot;&quot;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 使用例</span></span>
+<span class="line"><span style="color:#E1E4E8">safe_prompt </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> create_safe_prompt(</span></span>
+<span class="line"><span style="color:#FFAB70">    question</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">&quot;当社の2023年の売上は？&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">    context</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">&quot;決算資料によると、2023年度の売上は150億円でした。&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">response </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> llm.invoke(safe_prompt)</span></span></code></pre>
+<h3 id="戦略3-出力の自動検証">戦略3: 出力の自動検証</h3>
+<p>LLMの出力を別のシステムやモデルで検証することで、幻覚を検出します。</p>
+<h4 id="事実検証システムの実装">事実検証システムの実装</h4>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="python"><code><span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> typing </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> Dict, List</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> verify_llm_output</span><span style="color:#E1E4E8">(</span></span>
+<span class="line"><span style="color:#E1E4E8">    output: </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">    verification_sources: List[</span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#E1E4E8">) -&gt; Dict[</span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">any</span><span style="color:#E1E4E8">]:</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;LLMの出力を検証する&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#6A737D">    # 1. 固有名詞や数値を抽出</span></span>
+<span class="line"><span style="color:#E1E4E8">    entities </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> extract_entities(output)</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#6A737D">    # 2. 各エンティティを検証</span></span>
+<span class="line"><span style="color:#E1E4E8">    verification_results </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> []</span></span>
+<span class="line"><span style="color:#F97583">    for</span><span style="color:#E1E4E8"> entity </span><span style="color:#F97583">in</span><span style="color:#E1E4E8"> entities:</span></span>
+<span class="line"><span style="color:#6A737D">        # データベースや外部APIで検証</span></span>
+<span class="line"><span style="color:#E1E4E8">        is_valid </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> check_against_sources(entity, verification_sources)</span></span>
+<span class="line"><span style="color:#E1E4E8">        verification_results.append({</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;entity&quot;</span><span style="color:#E1E4E8">: entity,</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;verified&quot;</span><span style="color:#E1E4E8">: is_valid,</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;confidence&quot;</span><span style="color:#E1E4E8">: calculate_confidence(entity, verification_sources)</span></span>
+<span class="line"><span style="color:#E1E4E8">        })</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#6A737D">    # 3. 全体の信頼度スコアを算出</span></span>
+<span class="line"><span style="color:#E1E4E8">    overall_confidence </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> sum</span><span style="color:#E1E4E8">(</span></span>
+<span class="line"><span style="color:#E1E4E8">        r[</span><span style="color:#9ECBFF">&quot;confidence&quot;</span><span style="color:#E1E4E8">] </span><span style="color:#F97583">for</span><span style="color:#E1E4E8"> r </span><span style="color:#F97583">in</span><span style="color:#E1E4E8"> verification_results</span></span>
+<span class="line"><span style="color:#E1E4E8">    ) </span><span style="color:#F97583">/</span><span style="color:#79B8FF"> len</span><span style="color:#E1E4E8">(verification_results)</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;output&quot;</span><span style="color:#E1E4E8">: output,</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;entities&quot;</span><span style="color:#E1E4E8">: verification_results,</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;overall_confidence&quot;</span><span style="color:#E1E4E8">: overall_confidence,</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;is_trustworthy&quot;</span><span style="color:#E1E4E8">: overall_confidence </span><span style="color:#F97583">&gt;</span><span style="color:#79B8FF"> 0.8</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 使用例</span></span>
+<span class="line"><span style="color:#E1E4E8">llm_response </span><span style="color:#F97583">=</span><span style="color:#9ECBFF"> &quot;株式会社XYZは2020年に設立され、売上は100億円です。&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">verification </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> verify_llm_output(</span></span>
+<span class="line"><span style="color:#FFAB70">    output</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">llm_response,</span></span>
+<span class="line"><span style="color:#FFAB70">    verification_sources</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">[</span><span style="color:#9ECBFF">&quot;company_database&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&quot;financial_reports&quot;</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">if</span><span style="color:#F97583"> not</span><span style="color:#E1E4E8"> verification[</span><span style="color:#9ECBFF">&quot;is_trustworthy&quot;</span><span style="color:#E1E4E8">]:</span></span>
+<span class="line"><span style="color:#79B8FF">    print</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">&quot;警告: 出力の信頼性が低いため、人間による確認が必要です&quot;</span><span style="color:#E1E4E8">)</span></span></code></pre>
+<h4 id="セルフチェックプロンプト">セルフチェックプロンプト</h4>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="python"><code><span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> self_verification_chain</span><span style="color:#E1E4E8">(question: </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">) -&gt; </span><span style="color:#79B8FF">dict</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;LLM自身に回答の検証をさせる&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#6A737D">    # 1. 初回回答生成</span></span>
+<span class="line"><span style="color:#E1E4E8">    initial_response </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> llm.invoke(</span><span style="color:#F97583">f</span><span style="color:#9ECBFF">&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#9ECBFF">    質問: </span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">question</span><span style="color:#79B8FF">}</span></span>
+<span class="line"><span style="color:#9ECBFF">    </span></span>
+<span class="line"><span style="color:#9ECBFF">    できる限り正確に回答してください。</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#6A737D">    # 2. 自己検証</span></span>
+<span class="line"><span style="color:#E1E4E8">    verification_prompt </span><span style="color:#F97583">=</span><span style="color:#F97583"> f</span><span style="color:#9ECBFF">&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#9ECBFF">    以下の回答の正確性を評価してください。</span></span>
+<span class="line"><span style="color:#9ECBFF">    </span></span>
+<span class="line"><span style="color:#9ECBFF">    【質問】</span></span>
+<span class="line"><span style="color:#79B8FF">    {</span><span style="color:#E1E4E8">question</span><span style="color:#79B8FF">}</span></span>
+<span class="line"><span style="color:#9ECBFF">    </span></span>
+<span class="line"><span style="color:#9ECBFF">    【回答】</span></span>
+<span class="line"><span style="color:#79B8FF">    {</span><span style="color:#E1E4E8">initial_response</span><span style="color:#79B8FF">}</span></span>
+<span class="line"><span style="color:#9ECBFF">    </span></span>
+<span class="line"><span style="color:#9ECBFF">    【評価項目】</span></span>
+<span class="line"><span style="color:#9ECBFF">    1. 事実の正確性（1-5点）</span></span>
+<span class="line"><span style="color:#9ECBFF">    2. 根拠の明確さ（1-5点）</span></span>
+<span class="line"><span style="color:#9ECBFF">    3. 不確実性の適切な表現（1-5点）</span></span>
+<span class="line"><span style="color:#9ECBFF">    </span></span>
+<span class="line"><span style="color:#9ECBFF">    評価とともに、問題点があれば指摘してください。</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#E1E4E8">    verification </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> llm.invoke(verification_prompt)</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#6A737D">    # 3. 必要に応じて修正</span></span>
+<span class="line"><span style="color:#F97583">    if</span><span style="color:#E1E4E8"> needs_correction(verification):</span></span>
+<span class="line"><span style="color:#E1E4E8">        corrected_response </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> llm.invoke(</span><span style="color:#F97583">f</span><span style="color:#9ECBFF">&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#9ECBFF">        以下の指摘に基づいて回答を修正してください：</span></span>
+<span class="line"><span style="color:#9ECBFF">        </span></span>
+<span class="line"><span style="color:#9ECBFF">        【元の回答】</span></span>
+<span class="line"><span style="color:#79B8FF">        {</span><span style="color:#E1E4E8">initial_response</span><span style="color:#79B8FF">}</span></span>
+<span class="line"><span style="color:#9ECBFF">        </span></span>
+<span class="line"><span style="color:#9ECBFF">        【指摘事項】</span></span>
+<span class="line"><span style="color:#79B8FF">        {</span><span style="color:#E1E4E8">verification</span><span style="color:#79B8FF">}</span></span>
+<span class="line"><span style="color:#9ECBFF">        </span></span>
+<span class="line"><span style="color:#9ECBFF">        【修正後の回答】</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;&quot;&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;final_answer&quot;</span><span style="color:#E1E4E8">: corrected_response,</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;verification&quot;</span><span style="color:#E1E4E8">: verification,</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;corrected&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">True</span></span>
+<span class="line"><span style="color:#E1E4E8">        }</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;final_answer&quot;</span><span style="color:#E1E4E8">: initial_response,</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;verification&quot;</span><span style="color:#E1E4E8">: verification,</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;corrected&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">False</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span></code></pre>
+<h3 id="戦略4-ソース引用の徹底">戦略4: ソース引用の徹底</h3>
+<p>情報源を明示することで、ユーザーが情報の信頼性を判断できるようにします。</p>
+<h4 id="ソース付き回答の生成">ソース付き回答の生成</h4>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="typescript"><code><span class="line"><span style="color:#F97583">interface</span><span style="color:#B392F0"> SourcedAnswer</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#FFAB70">    answer</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#FFAB70">    sources</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Source</span><span style="color:#E1E4E8">[];</span></span>
+<span class="line"><span style="color:#FFAB70">    confidence</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> number</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">interface</span><span style="color:#B392F0"> Source</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#FFAB70">    content</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#FFAB70">    url</span><span style="color:#F97583">?:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#FFAB70">    title</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#FFAB70">    relevance_score</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> number</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">async</span><span style="color:#F97583"> function</span><span style="color:#B392F0"> generateAnswerWithSources</span><span style="color:#E1E4E8">(</span></span>
+<span class="line"><span style="color:#FFAB70">    question</span><span style="color:#F97583">:</span><span style="color:#79B8FF"> string</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">    documents</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Document</span><span style="color:#E1E4E8">[]</span></span>
+<span class="line"><span style="color:#E1E4E8">)</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Promise</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">SourcedAnswer</span><span style="color:#E1E4E8">&gt; {</span></span>
+<span class="line"><span style="color:#6A737D">    // 関連文書を検索</span></span>
+<span class="line"><span style="color:#F97583">    const</span><span style="color:#79B8FF"> relevantDocs</span><span style="color:#F97583"> =</span><span style="color:#F97583"> await</span><span style="color:#B392F0"> searchRelevantDocuments</span><span style="color:#E1E4E8">(question, documents);</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#6A737D">    // ソース付きプロンプト生成</span></span>
+<span class="line"><span style="color:#F97583">    const</span><span style="color:#79B8FF"> prompt</span><span style="color:#F97583"> =</span><span style="color:#9ECBFF"> `</span></span>
+<span class="line"><span style="color:#9ECBFF">以下の情報源のみを使用して質問に回答してください。</span></span>
+<span class="line"><span style="color:#9ECBFF">情報源に記載されていない内容は回答に含めないでください。</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">【情報源】</span></span>
+<span class="line"><span style="color:#9ECBFF">${</span><span style="color:#E1E4E8">relevantDocs</span><span style="color:#9ECBFF">.</span><span style="color:#B392F0">map</span><span style="color:#9ECBFF">((</span><span style="color:#79B8FF">doc</span><span style="color:#9ECBFF">, </span><span style="color:#79B8FF">i</span><span style="color:#9ECBFF">) </span><span style="color:#F97583">=&gt;</span><span style="color:#9ECBFF"> `</span></span>
+<span class="line"><span style="color:#9ECBFF">[${</span><span style="color:#E1E4E8">i</span><span style="color:#F97583"> +</span><span style="color:#79B8FF"> 1</span><span style="color:#9ECBFF">}] ${</span><span style="color:#E1E4E8">doc</span><span style="color:#9ECBFF">.</span><span style="color:#E1E4E8">title</span><span style="color:#9ECBFF">}</span></span>
+<span class="line"><span style="color:#9ECBFF">${</span><span style="color:#E1E4E8">doc</span><span style="color:#9ECBFF">.</span><span style="color:#E1E4E8">content</span><span style="color:#9ECBFF">}</span></span>
+<span class="line"><span style="color:#9ECBFF">`</span><span style="color:#9ECBFF">).</span><span style="color:#B392F0">join</span><span style="color:#9ECBFF">(</span><span style="color:#9ECBFF">&#39;</span><span style="color:#79B8FF">\n</span><span style="color:#9ECBFF">&#39;</span><span style="color:#9ECBFF">)</span><span style="color:#9ECBFF">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">【質問】</span></span>
+<span class="line"><span style="color:#9ECBFF">${</span><span style="color:#E1E4E8">question</span><span style="color:#9ECBFF">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">【回答形式】</span></span>
+<span class="line"><span style="color:#9ECBFF">回答の各文の後に、参照した情報源の番号を [1], [2] のように記載してください。</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">【回答】</span></span>
+<span class="line"><span style="color:#9ECBFF">    `</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    const</span><span style="color:#79B8FF"> response</span><span style="color:#F97583"> =</span><span style="color:#F97583"> await</span><span style="color:#E1E4E8"> llm.</span><span style="color:#B392F0">invoke</span><span style="color:#E1E4E8">(prompt);</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#6A737D">    // 引用を解析</span></span>
+<span class="line"><span style="color:#F97583">    const</span><span style="color:#79B8FF"> citations</span><span style="color:#F97583"> =</span><span style="color:#B392F0"> extractCitations</span><span style="color:#E1E4E8">(response);</span></span>
+<span class="line"><span style="color:#F97583">    const</span><span style="color:#79B8FF"> citedSources</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> citations.</span><span style="color:#B392F0">map</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">num</span><span style="color:#F97583"> =&gt;</span><span style="color:#E1E4E8"> relevantDocs[num </span><span style="color:#F97583">-</span><span style="color:#79B8FF"> 1</span><span style="color:#E1E4E8">]);</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">        answer: response,</span></span>
+<span class="line"><span style="color:#E1E4E8">        sources: citedSources,</span></span>
+<span class="line"><span style="color:#E1E4E8">        confidence: </span><span style="color:#B392F0">calculateConfidence</span><span style="color:#E1E4E8">(citations, relevantDocs)</span></span>
+<span class="line"><span style="color:#E1E4E8">    };</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">// 使用例</span></span>
+<span class="line"><span style="color:#F97583">const</span><span style="color:#79B8FF"> result</span><span style="color:#F97583"> =</span><span style="color:#F97583"> await</span><span style="color:#B392F0"> generateAnswerWithSources</span><span style="color:#E1E4E8">(</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;最新の製品機能は？&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">    productDocuments</span></span>
+<span class="line"><span style="color:#E1E4E8">);</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">console.</span><span style="color:#B392F0">log</span><span style="color:#E1E4E8">(result.answer);</span></span>
+<span class="line"><span style="color:#E1E4E8">console.</span><span style="color:#B392F0">log</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">&quot;</span><span style="color:#79B8FF">\n</span><span style="color:#9ECBFF">参考資料:&quot;</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">result.sources.</span><span style="color:#B392F0">forEach</span><span style="color:#E1E4E8">((</span><span style="color:#FFAB70">source</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">i</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">=&gt;</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">    console.</span><span style="color:#B392F0">log</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">`[${</span><span style="color:#E1E4E8">i</span><span style="color:#F97583"> +</span><span style="color:#79B8FF"> 1</span><span style="color:#9ECBFF">}] ${</span><span style="color:#E1E4E8">source</span><span style="color:#9ECBFF">.</span><span style="color:#E1E4E8">title</span><span style="color:#9ECBFF">}`</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#F97583">    if</span><span style="color:#E1E4E8"> (source.url) console.</span><span style="color:#B392F0">log</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">`    ${</span><span style="color:#E1E4E8">source</span><span style="color:#9ECBFF">.</span><span style="color:#E1E4E8">url</span><span style="color:#9ECBFF">}`</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">});</span></span></code></pre>
+<h3 id="戦略5-パラメータ調整による制御">戦略5: パラメータ調整による制御</h3>
+<p>モデルのパラメータを調整して、正確性と創造性のバランスを取ります。</p>
+<h4 id="温度パラメータの最適化">温度パラメータの最適化</h4>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="python"><code><span class="line"><span style="color:#F97583">def</span><span style="color:#B392F0"> generate_with_optimal_params</span><span style="color:#E1E4E8">(</span></span>
+<span class="line"><span style="color:#E1E4E8">    prompt: </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">    task_type: </span><span style="color:#79B8FF">str</span><span style="color:#F97583"> =</span><span style="color:#9ECBFF"> &quot;factual&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">) -&gt; </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;タスクに応じた最適なパラメータでLLMを実行&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#6A737D">    # タスクタイプ別のパラメータ設定</span></span>
+<span class="line"><span style="color:#E1E4E8">    param_configs </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;factual&quot;</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;temperature&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0.0</span><span style="color:#E1E4E8">,  </span><span style="color:#6A737D"># 決定的な出力</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;top_p&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0.1</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;frequency_penalty&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0.0</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;presence_penalty&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0.0</span></span>
+<span class="line"><span style="color:#E1E4E8">        },</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;creative&quot;</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;temperature&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0.8</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;top_p&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0.9</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;frequency_penalty&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0.5</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;presence_penalty&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0.5</span></span>
+<span class="line"><span style="color:#E1E4E8">        },</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;balanced&quot;</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;temperature&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0.3</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;top_p&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0.5</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;frequency_penalty&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0.2</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;presence_penalty&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0.2</span></span>
+<span class="line"><span style="color:#E1E4E8">        }</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#E1E4E8">    params </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> param_configs.get(task_type, param_configs[</span><span style="color:#9ECBFF">&quot;balanced&quot;</span><span style="color:#E1E4E8">])</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#E1E4E8">    response </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> client.chat.completions.create(</span></span>
+<span class="line"><span style="color:#FFAB70">        model</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">&quot;gpt-4&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">        messages</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">[{</span><span style="color:#9ECBFF">&quot;role&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;user&quot;</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&quot;content&quot;</span><span style="color:#E1E4E8">: prompt}],</span></span>
+<span class="line"><span style="color:#F97583">        **</span><span style="color:#E1E4E8">params</span></span>
+<span class="line"><span style="color:#E1E4E8">    )</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> response.choices[</span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">].message.content</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 使用例</span></span>
+<span class="line"><span style="color:#6A737D"># 事実ベースの質問には低い温度</span></span>
+<span class="line"><span style="color:#E1E4E8">factual_answer </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> generate_with_optimal_params(</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;2024年の東京オリンピックの開催日は？&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">    task_type</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">&quot;factual&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># クリエイティブなタスクには高い温度</span></span>
+<span class="line"><span style="color:#E1E4E8">creative_answer </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> generate_with_optimal_params(</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;未来の都市をイメージした物語を書いて&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">    task_type</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">&quot;creative&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">)</span></span></code></pre>
+<h2 id="実務での幻覚対策フレームワーク">実務での幻覚対策フレームワーク</h2>
+<p>複数の対策を組み合わせた包括的なフレームワークです。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="python"><code><span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> typing </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> Dict, Optional</span></span>
+<span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> dataclasses </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> dataclass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">@dataclass</span></span>
+<span class="line"><span style="color:#F97583">class</span><span style="color:#B392F0"> HallucinationPreventionConfig</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;幻覚防止の設定&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    use_rag: </span><span style="color:#79B8FF">bool</span><span style="color:#F97583"> =</span><span style="color:#79B8FF"> True</span></span>
+<span class="line"><span style="color:#E1E4E8">    verify_output: </span><span style="color:#79B8FF">bool</span><span style="color:#F97583"> =</span><span style="color:#79B8FF"> True</span></span>
+<span class="line"><span style="color:#E1E4E8">    require_sources: </span><span style="color:#79B8FF">bool</span><span style="color:#F97583"> =</span><span style="color:#79B8FF"> True</span></span>
+<span class="line"><span style="color:#E1E4E8">    max_temperature: </span><span style="color:#79B8FF">float</span><span style="color:#F97583"> =</span><span style="color:#79B8FF"> 0.3</span></span>
+<span class="line"><span style="color:#E1E4E8">    enable_self_check: </span><span style="color:#79B8FF">bool</span><span style="color:#F97583"> =</span><span style="color:#79B8FF"> True</span></span>
+<span class="line"><span style="color:#E1E4E8">    human_review_threshold: </span><span style="color:#79B8FF">float</span><span style="color:#F97583"> =</span><span style="color:#79B8FF"> 0.7</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">class</span><span style="color:#B392F0"> SafeLLMWrapper</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;幻覚対策を組み込んだLLMラッパー&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    def</span><span style="color:#79B8FF"> __init__</span><span style="color:#E1E4E8">(self, config: HallucinationPreventionConfig):</span></span>
+<span class="line"><span style="color:#79B8FF">        self</span><span style="color:#E1E4E8">.config </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> config</span></span>
+<span class="line"><span style="color:#79B8FF">        self</span><span style="color:#E1E4E8">.llm </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> ChatOpenAI(</span><span style="color:#FFAB70">temperature</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">config.max_temperature)</span></span>
+<span class="line"><span style="color:#79B8FF">        self</span><span style="color:#E1E4E8">.vectorstore </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> self</span><span style="color:#E1E4E8">._setup_vectorstore() </span><span style="color:#F97583">if</span><span style="color:#E1E4E8"> config.use_rag </span><span style="color:#F97583">else</span><span style="color:#79B8FF"> None</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    def</span><span style="color:#B392F0"> generate</span><span style="color:#E1E4E8">(self, question: </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">) -&gt; Dict[</span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">any</span><span style="color:#E1E4E8">]:</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;&quot;&quot;安全な回答生成&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">        result </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;question&quot;</span><span style="color:#E1E4E8">: question,</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;answer&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">&quot;&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;confidence&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0.0</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;sources&quot;</span><span style="color:#E1E4E8">: [],</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;warnings&quot;</span><span style="color:#E1E4E8">: [],</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;requires_human_review&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">False</span></span>
+<span class="line"><span style="color:#E1E4E8">        }</span></span>
+<span class="line"><span style="color:#E1E4E8">        </span></span>
+<span class="line"><span style="color:#F97583">        try</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#6A737D">            # 1. RAGによる情報取得</span></span>
+<span class="line"><span style="color:#E1E4E8">            context </span><span style="color:#F97583">=</span><span style="color:#9ECBFF"> &quot;&quot;</span></span>
+<span class="line"><span style="color:#F97583">            if</span><span style="color:#79B8FF"> self</span><span style="color:#E1E4E8">.config.use_rag </span><span style="color:#F97583">and</span><span style="color:#79B8FF"> self</span><span style="color:#E1E4E8">.vectorstore:</span></span>
+<span class="line"><span style="color:#E1E4E8">                docs </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> self</span><span style="color:#E1E4E8">.vectorstore.similarity_search(question, </span><span style="color:#FFAB70">k</span><span style="color:#F97583">=</span><span style="color:#79B8FF">3</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">                context </span><span style="color:#F97583">=</span><span style="color:#9ECBFF"> &quot;</span><span style="color:#79B8FF">\n</span><span style="color:#9ECBFF">&quot;</span><span style="color:#E1E4E8">.join([doc.page_content </span><span style="color:#F97583">for</span><span style="color:#E1E4E8"> doc </span><span style="color:#F97583">in</span><span style="color:#E1E4E8"> docs])</span></span>
+<span class="line"><span style="color:#E1E4E8">                result[</span><span style="color:#9ECBFF">&quot;sources&quot;</span><span style="color:#E1E4E8">] </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> [doc.metadata </span><span style="color:#F97583">for</span><span style="color:#E1E4E8"> doc </span><span style="color:#F97583">in</span><span style="color:#E1E4E8"> docs]</span></span>
+<span class="line"><span style="color:#E1E4E8">            </span></span>
+<span class="line"><span style="color:#6A737D">            # 2. 構造化プロンプトで回答生成</span></span>
+<span class="line"><span style="color:#E1E4E8">            prompt </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> self</span><span style="color:#E1E4E8">._create_safe_prompt(question, context)</span></span>
+<span class="line"><span style="color:#E1E4E8">            answer </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> self</span><span style="color:#E1E4E8">.llm.invoke(prompt)</span></span>
+<span class="line"><span style="color:#E1E4E8">            result[</span><span style="color:#9ECBFF">&quot;answer&quot;</span><span style="color:#E1E4E8">] </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> answer</span></span>
+<span class="line"><span style="color:#E1E4E8">            </span></span>
+<span class="line"><span style="color:#6A737D">            # 3. 自己検証</span></span>
+<span class="line"><span style="color:#F97583">            if</span><span style="color:#79B8FF"> self</span><span style="color:#E1E4E8">.config.enable_self_check:</span></span>
+<span class="line"><span style="color:#E1E4E8">                verification </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> self</span><span style="color:#E1E4E8">._self_verify(question, answer)</span></span>
+<span class="line"><span style="color:#E1E4E8">                result[</span><span style="color:#9ECBFF">&quot;confidence&quot;</span><span style="color:#E1E4E8">] </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> verification[</span><span style="color:#9ECBFF">&quot;confidence&quot;</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#E1E4E8">                result[</span><span style="color:#9ECBFF">&quot;warnings&quot;</span><span style="color:#E1E4E8">] </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> verification[</span><span style="color:#9ECBFF">&quot;warnings&quot;</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#E1E4E8">            </span></span>
+<span class="line"><span style="color:#6A737D">            # 4. 出力検証</span></span>
+<span class="line"><span style="color:#F97583">            if</span><span style="color:#79B8FF"> self</span><span style="color:#E1E4E8">.config.verify_output:</span></span>
+<span class="line"><span style="color:#E1E4E8">                is_valid </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> self</span><span style="color:#E1E4E8">._verify_facts(answer, context)</span></span>
+<span class="line"><span style="color:#F97583">                if</span><span style="color:#F97583"> not</span><span style="color:#E1E4E8"> is_valid:</span></span>
+<span class="line"><span style="color:#E1E4E8">                    result[</span><span style="color:#9ECBFF">&quot;warnings&quot;</span><span style="color:#E1E4E8">].append(</span><span style="color:#9ECBFF">&quot;事実確認で矛盾を検出&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">                    result[</span><span style="color:#9ECBFF">&quot;confidence&quot;</span><span style="color:#E1E4E8">] </span><span style="color:#F97583">*=</span><span style="color:#79B8FF"> 0.5</span></span>
+<span class="line"><span style="color:#E1E4E8">            </span></span>
+<span class="line"><span style="color:#6A737D">            # 5. 人間レビューの判定</span></span>
+<span class="line"><span style="color:#F97583">            if</span><span style="color:#E1E4E8"> result[</span><span style="color:#9ECBFF">&quot;confidence&quot;</span><span style="color:#E1E4E8">] </span><span style="color:#F97583">&lt;</span><span style="color:#79B8FF"> self</span><span style="color:#E1E4E8">.config.human_review_threshold:</span></span>
+<span class="line"><span style="color:#E1E4E8">                result[</span><span style="color:#9ECBFF">&quot;requires_human_review&quot;</span><span style="color:#E1E4E8">] </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> True</span></span>
+<span class="line"><span style="color:#E1E4E8">            </span></span>
+<span class="line"><span style="color:#F97583">        except</span><span style="color:#79B8FF"> Exception</span><span style="color:#F97583"> as</span><span style="color:#E1E4E8"> e:</span></span>
+<span class="line"><span style="color:#E1E4E8">            result[</span><span style="color:#9ECBFF">&quot;warnings&quot;</span><span style="color:#E1E4E8">].append(</span><span style="color:#F97583">f</span><span style="color:#9ECBFF">&quot;エラー: </span><span style="color:#79B8FF">{str</span><span style="color:#E1E4E8">(e)</span><span style="color:#79B8FF">}</span><span style="color:#9ECBFF">&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">            result[</span><span style="color:#9ECBFF">&quot;requires_human_review&quot;</span><span style="color:#E1E4E8">] </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> True</span></span>
+<span class="line"><span style="color:#E1E4E8">        </span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#E1E4E8"> result</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    def</span><span style="color:#B392F0"> _create_safe_prompt</span><span style="color:#E1E4E8">(self, question: </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">, context: </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">) -&gt; </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;&quot;&quot;安全なプロンプト生成&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#F97583"> f</span><span style="color:#9ECBFF">&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#9ECBFF">あなたは正確性を最優先する専門家です。</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">【重要な制約】</span></span>
+<span class="line"><span style="color:#9ECBFF">1. 提供された情報のみを使用してください</span></span>
+<span class="line"><span style="color:#9ECBFF">2. 不確実な場合は明示してください</span></span>
+<span class="line"><span style="color:#9ECBFF">3. </span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">&quot;情報源を引用してください&quot;</span><span style="color:#F97583"> if</span><span style="color:#79B8FF"> self</span><span style="color:#E1E4E8">.config.require_sources </span><span style="color:#F97583">else</span><span style="color:#9ECBFF"> &quot;&quot;</span><span style="color:#E1E4E8">)</span><span style="color:#79B8FF">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">【提供情報】</span></span>
+<span class="line"><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">context </span><span style="color:#F97583">if</span><span style="color:#E1E4E8"> context </span><span style="color:#F97583">else</span><span style="color:#9ECBFF"> &quot;追加情報なし&quot;</span><span style="color:#79B8FF">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#9ECBFF">【質問】</span></span>
+<span class="line"><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">question</span><span style="color:#79B8FF">}</span></span>
+<span class="line"><span style="color:#9ECBFF">&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    def</span><span style="color:#B392F0"> _self_verify</span><span style="color:#E1E4E8">(self, question: </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">, answer: </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">) -&gt; Dict:</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;&quot;&quot;自己検証を実行&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#6A737D">        # 実装省略</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#E1E4E8"> {</span><span style="color:#9ECBFF">&quot;confidence&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0.85</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">&quot;warnings&quot;</span><span style="color:#E1E4E8">: []}</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    def</span><span style="color:#B392F0"> _verify_facts</span><span style="color:#E1E4E8">(self, answer: </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">, context: </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">) -&gt; </span><span style="color:#79B8FF">bool</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;&quot;&quot;事実検証を実行&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#6A737D">        # 実装省略</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#79B8FF"> True</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 使用例</span></span>
+<span class="line"><span style="color:#E1E4E8">config </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> HallucinationPreventionConfig(</span></span>
+<span class="line"><span style="color:#FFAB70">    use_rag</span><span style="color:#F97583">=</span><span style="color:#79B8FF">True</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">    verify_output</span><span style="color:#F97583">=</span><span style="color:#79B8FF">True</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">    require_sources</span><span style="color:#F97583">=</span><span style="color:#79B8FF">True</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">    max_temperature</span><span style="color:#F97583">=</span><span style="color:#79B8FF">0.2</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">    enable_self_check</span><span style="color:#F97583">=</span><span style="color:#79B8FF">True</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">    human_review_threshold</span><span style="color:#F97583">=</span><span style="color:#79B8FF">0.7</span></span>
+<span class="line"><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">safe_llm </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> SafeLLMWrapper(config)</span></span>
+<span class="line"><span style="color:#E1E4E8">result </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> safe_llm.generate(</span><span style="color:#9ECBFF">&quot;当社の最新製品の仕様は？&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#79B8FF">print</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">f</span><span style="color:#9ECBFF">&quot;回答: </span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">result[</span><span style="color:#9ECBFF">&#39;answer&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#79B8FF">}</span><span style="color:#9ECBFF">&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#79B8FF">print</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">f</span><span style="color:#9ECBFF">&quot;信頼度: </span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">result[</span><span style="color:#9ECBFF">&#39;confidence&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#F97583">:.2%</span><span style="color:#79B8FF">}</span><span style="color:#9ECBFF">&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#79B8FF">print</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">f</span><span style="color:#9ECBFF">&quot;人間レビュー必要: </span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">result[</span><span style="color:#9ECBFF">&#39;requires_human_review&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#79B8FF">}</span><span style="color:#9ECBFF">&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">if</span><span style="color:#E1E4E8"> result[</span><span style="color:#9ECBFF">&#39;warnings&#39;</span><span style="color:#E1E4E8">]:</span></span>
+<span class="line"><span style="color:#79B8FF">    print</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">f</span><span style="color:#9ECBFF">&quot;警告: </span><span style="color:#79B8FF">{</span><span style="color:#9ECBFF">&#39;, &#39;</span><span style="color:#E1E4E8">.join(result[</span><span style="color:#9ECBFF">&#39;warnings&#39;</span><span style="color:#E1E4E8">])</span><span style="color:#79B8FF">}</span><span style="color:#9ECBFF">&quot;</span><span style="color:#E1E4E8">)</span></span></code></pre>
+<h2 id="モニタリングと継続的改善">モニタリングと継続的改善</h2>
+<p>幻覚対策は一度実装して終わりではなく、継続的なモニタリングと改善が必要です。</p>
+<h3 id="幻覚検出メトリクス">幻覚検出メトリクス</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8;overflow-x:auto" tabindex="0" data-language="python"><code><span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> datetime </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> datetime</span></span>
+<span class="line"><span style="color:#F97583">from</span><span style="color:#E1E4E8"> typing </span><span style="color:#F97583">import</span><span style="color:#E1E4E8"> List</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">class</span><span style="color:#B392F0"> HallucinationMonitor</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#9ECBFF">    &quot;&quot;&quot;幻覚発生のモニタリング&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    def</span><span style="color:#79B8FF"> __init__</span><span style="color:#E1E4E8">(self):</span></span>
+<span class="line"><span style="color:#79B8FF">        self</span><span style="color:#E1E4E8">.logs </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> []</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    def</span><span style="color:#B392F0"> log_generation</span><span style="color:#E1E4E8">(</span></span>
+<span class="line"><span style="color:#E1E4E8">        self,</span></span>
+<span class="line"><span style="color:#E1E4E8">        question: </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">        answer: </span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">        confidence: </span><span style="color:#79B8FF">float</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">        sources: List[</span><span style="color:#79B8FF">str</span><span style="color:#E1E4E8">],</span></span>
+<span class="line"><span style="color:#E1E4E8">        verification_passed: </span><span style="color:#79B8FF">bool</span></span>
+<span class="line"><span style="color:#E1E4E8">    ):</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;&quot;&quot;生成結果をログ記録&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#79B8FF">        self</span><span style="color:#E1E4E8">.logs.append({</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;timestamp&quot;</span><span style="color:#E1E4E8">: datetime.now(),</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;question&quot;</span><span style="color:#E1E4E8">: question,</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;answer&quot;</span><span style="color:#E1E4E8">: answer,</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;confidence&quot;</span><span style="color:#E1E4E8">: confidence,</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;sources&quot;</span><span style="color:#E1E4E8">: sources,</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;verification_passed&quot;</span><span style="color:#E1E4E8">: verification_passed</span></span>
+<span class="line"><span style="color:#E1E4E8">        })</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    def</span><span style="color:#B392F0"> calculate_metrics</span><span style="color:#E1E4E8">(self) -&gt; Dict:</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;&quot;&quot;メトリクスを計算&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#E1E4E8">        total </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> len</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">self</span><span style="color:#E1E4E8">.logs)</span></span>
+<span class="line"><span style="color:#F97583">        if</span><span style="color:#E1E4E8"> total </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#F97583">            return</span><span style="color:#E1E4E8"> {}</span></span>
+<span class="line"><span style="color:#E1E4E8">        </span></span>
+<span class="line"><span style="color:#E1E4E8">        passed </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> sum</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">1</span><span style="color:#F97583"> for</span><span style="color:#E1E4E8"> log </span><span style="color:#F97583">in</span><span style="color:#79B8FF"> self</span><span style="color:#E1E4E8">.logs </span><span style="color:#F97583">if</span><span style="color:#E1E4E8"> log[</span><span style="color:#9ECBFF">&quot;verification_passed&quot;</span><span style="color:#E1E4E8">])</span></span>
+<span class="line"><span style="color:#E1E4E8">        avg_confidence </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> sum</span><span style="color:#E1E4E8">(log[</span><span style="color:#9ECBFF">&quot;confidence&quot;</span><span style="color:#E1E4E8">] </span><span style="color:#F97583">for</span><span style="color:#E1E4E8"> log </span><span style="color:#F97583">in</span><span style="color:#79B8FF"> self</span><span style="color:#E1E4E8">.logs) </span><span style="color:#F97583">/</span><span style="color:#E1E4E8"> total</span></span>
+<span class="line"><span style="color:#E1E4E8">        </span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;total_generations&quot;</span><span style="color:#E1E4E8">: total,</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;verification_pass_rate&quot;</span><span style="color:#E1E4E8">: passed </span><span style="color:#F97583">/</span><span style="color:#E1E4E8"> total,</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;average_confidence&quot;</span><span style="color:#E1E4E8">: avg_confidence,</span></span>
+<span class="line"><span style="color:#9ECBFF">            &quot;low_confidence_rate&quot;</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">sum</span><span style="color:#E1E4E8">(</span></span>
+<span class="line"><span style="color:#79B8FF">                1</span><span style="color:#F97583"> for</span><span style="color:#E1E4E8"> log </span><span style="color:#F97583">in</span><span style="color:#79B8FF"> self</span><span style="color:#E1E4E8">.logs </span><span style="color:#F97583">if</span><span style="color:#E1E4E8"> log[</span><span style="color:#9ECBFF">&quot;confidence&quot;</span><span style="color:#E1E4E8">] </span><span style="color:#F97583">&lt;</span><span style="color:#79B8FF"> 0.7</span></span>
+<span class="line"><span style="color:#E1E4E8">            ) </span><span style="color:#F97583">/</span><span style="color:#E1E4E8"> total</span></span>
+<span class="line"><span style="color:#E1E4E8">        }</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    def</span><span style="color:#B392F0"> get_suspicious_cases</span><span style="color:#E1E4E8">(self, threshold: </span><span style="color:#79B8FF">float</span><span style="color:#F97583"> =</span><span style="color:#79B8FF"> 0.6</span><span style="color:#E1E4E8">) -&gt; List[Dict]:</span></span>
+<span class="line"><span style="color:#9ECBFF">        &quot;&quot;&quot;疑わしいケースを抽出&quot;&quot;&quot;</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#E1E4E8"> [</span></span>
+<span class="line"><span style="color:#E1E4E8">            log </span><span style="color:#F97583">for</span><span style="color:#E1E4E8"> log </span><span style="color:#F97583">in</span><span style="color:#79B8FF"> self</span><span style="color:#E1E4E8">.logs</span></span>
+<span class="line"><span style="color:#F97583">            if</span><span style="color:#E1E4E8"> log[</span><span style="color:#9ECBFF">&quot;confidence&quot;</span><span style="color:#E1E4E8">] </span><span style="color:#F97583">&lt;</span><span style="color:#E1E4E8"> threshold </span><span style="color:#F97583">or</span><span style="color:#F97583"> not</span><span style="color:#E1E4E8"> log[</span><span style="color:#9ECBFF">&quot;verification_passed&quot;</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#E1E4E8">        ]</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 使用例</span></span>
+<span class="line"><span style="color:#E1E4E8">monitor </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> HallucinationMonitor()</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 各生成時にログ記録</span></span>
+<span class="line"><span style="color:#E1E4E8">result </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> safe_llm.generate(</span><span style="color:#9ECBFF">&quot;質問内容&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">monitor.log_generation(</span></span>
+<span class="line"><span style="color:#FFAB70">    question</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">&quot;質問内容&quot;</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#FFAB70">    answer</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">result[</span><span style="color:#9ECBFF">&quot;answer&quot;</span><span style="color:#E1E4E8">],</span></span>
+<span class="line"><span style="color:#FFAB70">    confidence</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">result[</span><span style="color:#9ECBFF">&quot;confidence&quot;</span><span style="color:#E1E4E8">],</span></span>
+<span class="line"><span style="color:#FFAB70">    sources</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">result[</span><span style="color:#9ECBFF">&quot;sources&quot;</span><span style="color:#E1E4E8">],</span></span>
+<span class="line"><span style="color:#FFAB70">    verification_passed</span><span style="color:#F97583">=</span><span style="color:#79B8FF">len</span><span style="color:#E1E4E8">(result[</span><span style="color:#9ECBFF">&quot;warnings&quot;</span><span style="color:#E1E4E8">]) </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> 0</span></span>
+<span class="line"><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 定期的にメトリクスを確認</span></span>
+<span class="line"><span style="color:#E1E4E8">metrics </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> monitor.calculate_metrics()</span></span>
+<span class="line"><span style="color:#79B8FF">print</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">f</span><span style="color:#9ECBFF">&quot;検証通過率: </span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">metrics[</span><span style="color:#9ECBFF">&#39;verification_pass_rate&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#F97583">:.2%</span><span style="color:#79B8FF">}</span><span style="color:#9ECBFF">&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#79B8FF">print</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">f</span><span style="color:#9ECBFF">&quot;平均信頼度: </span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">metrics[</span><span style="color:#9ECBFF">&#39;average_confidence&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#F97583">:.2%</span><span style="color:#79B8FF">}</span><span style="color:#9ECBFF">&quot;</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 疑わしいケースをレビュー</span></span>
+<span class="line"><span style="color:#E1E4E8">suspicious </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> monitor.get_suspicious_cases()</span></span>
+<span class="line"><span style="color:#F97583">for</span><span style="color:#E1E4E8"> case </span><span style="color:#F97583">in</span><span style="color:#E1E4E8"> suspicious:</span></span>
+<span class="line"><span style="color:#79B8FF">    print</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">f</span><span style="color:#9ECBFF">&quot;要確認: </span><span style="color:#79B8FF">{</span><span style="color:#E1E4E8">case[</span><span style="color:#9ECBFF">&#39;question&#39;</span><span style="color:#E1E4E8">]</span><span style="color:#79B8FF">}</span><span style="color:#9ECBFF">&quot;</span><span style="color:#E1E4E8">)</span></span></code></pre>
+<h2 id="よくある質問">よくある質問</h2>
+<h3 id="幻覚を完全に防ぐことはできますか">幻覚を完全に防ぐことはできますか？</h3>
+<p>現在の技術では、LLMの幻覚を100%防ぐことは困難です。しかし、本記事で紹介した対策を組み合わせることで、幻覚の発生率を大幅に削減できます。</p>
+<p>重要なのは、完全に防ぐことを目指すのではなく、以下のアプローチを取ることです：</p>
+<ol>
+<li><strong>幻覚のリスクを最小化</strong>：RAGやプロンプト設計で発生率を下げる</li>
+<li><strong>幻覚を検出</strong>：自動検証や人間レビューで検出</li>
+<li><strong>影響を限定</strong>：ソース引用により、ユーザーが判断できるようにする</li>
+</ol>
+<h3 id="ragを使えば幻覚は発生しませんか">RAGを使えば幻覚は発生しませんか？</h3>
+<p>いいえ、RAGを使用しても幻覚は完全には防げません。以下の理由があります：</p>
+<ul>
+<li>検索された情報が不完全または関連性が低い場合</li>
+<li>LLMが検索結果を誤解釈する場合</li>
+<li>複数の情報源から誤った統合をする場合</li>
+</ul>
+<div class="flex items-start gap-4 p-6 rounded-xl border my-8 shadow-sm bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-800 dark:text-yellow-200" role="alert"> <div class="flex-shrink-0 w-8 h-8 text-yellow-600 dark:text-yellow-400"> <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="w-8 h-8"> <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /> </svg> </div> <div class="prose prose-base dark:prose-invert max-w-none prose-p:my-0 prose-ul:my-0 prose-ol:my-0 w-full"> <p>RAGは幻覚を大幅に削減しますが、万能ではありません。検索品質の向上と、出力検証の組み合わせが重要です。</p> </div> </div>
+<h3 id="温度パラメータを0にすれば安全ですか">温度パラメータを0にすれば安全ですか？</h3>
+<p>温度を0に設定すると、出力はより決定的になり、幻覚のリスクは減少しますが、以下の問題があります：</p>
+<ul>
+<li><strong>柔軟性の低下</strong>：同じ入力に対して常に同じ出力</li>
+<li><strong>創造性の欠如</strong>：文章が硬く、不自然になる場合がある</li>
+<li><strong>完全な保証はない</strong>：温度0でも幻覚は発生する可能性がある</li>
+</ul>
+<p>推奨される設定：</p>
+<ul>
+<li><strong>事実ベースのタスク</strong>：温度 0.0 〜 0.2</li>
+<li><strong>バランス型</strong>：温度 0.3 〜 0.5</li>
+<li><strong>クリエイティブタスク</strong>：温度 0.6 〜 0.9</li>
+</ul>
+<h3 id="どの対策が最も効果的ですか">どの対策が最も効果的ですか？</h3>
+<p>タスクの種類によって最適な対策は異なりますが、一般的には以下の優先順位が推奨されます：</p>
+<ol>
+<li><strong>RAG統合</strong>（最も効果的）：信頼できる情報源を提供</li>
+<li><strong>プロンプト設計</strong>：実装が容易で即効性がある</li>
+<li><strong>出力検証</strong>：追加の安全層として機能</li>
+<li><strong>ソース引用</strong>：透明性を確保</li>
+<li><strong>パラメータ調整</strong>：補助的な対策</li>
+</ol>
+<p>実務では、これらを <strong>組み合わせて使用</strong> することが最も効果的です。</p>
+<h2 id="おわりに">おわりに</h2>
+<p>LLMの幻覚問題は、AI活用における最も重要な課題の1つです。本記事で紹介した対策を実装することで、信頼性の高いLLMアプリケーションを構築できます。</p>
+<p>重要なポイントは以下の通りです：</p>
+<ul>
+<li><strong>多層防御</strong>：複数の対策を組み合わせる</li>
+<li><strong>継続的監視</strong>：幻覚の発生を検出し、改善を続ける</li>
+<li><strong>透明性</strong>：情報源を明示し、ユーザーが判断できるようにする</li>
+<li><strong>人間の関与</strong>：重要な判断には人間のレビューを入れる</li>
+</ul>
+<p>次のステップとして、以下の学習をお勧めします：</p>
+<ul>
+<li><strong>RAGの高度な実装</strong>：ハイブリッド検索、リランキング、クエリ拡張</li>
+<li><strong>評価フレームワーク</strong>：幻覚検出の自動評価システム</li>
+<li><strong>ファインチューニング</strong>：特定ドメインでの精度向上</li>
+</ul>
+<p>私たちShineosでは、信頼性の高いAIシステムの構築を支援しています。幻覚対策を含むLLMアプリケーション開発にご興味がある方は、ぜひお問い合わせください。</p>
+<h2 id="参考リンク">参考リンク</h2>
+<ul>
+<li><a href="https://platform.openai.com/docs/guides/safety-best-practices" target="_blank" rel="noopener noreferrer"> OpenAI - Reducing Hallucinations </a></li>
+<li><a href="https://ai.google.dev/gemini-api/docs/grounding" target="_blank" rel="noopener noreferrer"> Google - Grounding with Gemini </a></li>
+<li><a href="https://python.langchain.com/docs/use_cases/question_answering/" target="_blank" rel="noopener noreferrer"> LangChain - RAG Best Practices </a></li>
+<li><a href="https://docs.anthropic.com/claude/docs/reducing-hallucinations" target="_blank" rel="noopener noreferrer"> Anthropic - Reducing Hallucinations in Claude </a></li>
+</ul> </div> <!-- Article Footer (Share & Tags) --> <footer class="mt-20 pt-10 border-t border-gray-100 dark:border-slate-800"> <div class="mb-12"> <div class="flex items-center space-x-4"> <span class="text-sm font-bold text-gray-500">Share:</span> <a href="https://twitter.com/intent/tweet?text=LLM%E3%81%AE%E5%B9%BB%E8%A6%9A%EF%BC%88Hallucination%EF%BC%89%E5%AF%BE%E7%AD%96%20-%20%E4%BF%A1%E9%A0%BC%E6%80%A7%E3%81%AE%E9%AB%98%E3%81%84AI%E3%82%B7%E3%82%B9%E3%83%86%E3%83%A0%E3%81%AE%E6%A7%8B%E7%AF%89%E6%96%B9%E6%B3%95&url=https%3A%2F%2Fblog.shineos.com%2Fpr-preview%2F22%2Fposts%2F2025-12-14-llm-hallucination-prevention%2F" target="_blank" rel="noopener noreferrer" class="p-2 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors" aria-label="Share on X"> <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path></svg> </a> <a href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fblog.shineos.com%2Fpr-preview%2F22%2Fposts%2F2025-12-14-llm-hallucination-prevention%2F" target="_blank" rel="noopener noreferrer" class="p-2 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors" aria-label="Share on LinkedIn"> <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M20.5 2h-17A1.5 1.5 0 002 3.5v17A1.5 1.5 0 003.5 22h17a1.5 1.5 0 001.5-1.5v-17A1.5 1.5 0 0020.5 2zM8 19H5v-9h3zM6.5 8.25A1.75 1.75 0 118.3 6.5a1.78 1.78 0 01-1.8 1.75zM19 19h-3v-4.74c0-1.42-.6-1.93-1.38-1.93A1.74 1.74 0 0013 14.19V19h-3v-9h2.9v1.3a3.11 3.11 0 012.7-1.4c1.55 0 3.36.86 3.36 3.66z"></path></svg> </a> </div> </div> </footer> </article> </main> <!-- Sidebar --> <aside class="w-full"> <div class="sticky top-24 space-y-6 w-full self-start"> <!-- Search Widget --> <div class="hidden md:block relative z-50 bg-white dark:bg-shineos-900 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-white/5"> <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-4">
+検索
+</h3> <div id="search" class="w-full relative"></div> <script>
+    window.addEventListener("DOMContentLoaded", (event) => {
+        new PagefindUI({
+            element: "#search",
+            showSubResults: true,
+            showImages: false,
+            translations: {
+                placeholder: "記事を検索...",
+                zero_results:
+                    "[SEARCH_TERM] に一致する記事が見つかりませんでした",
+            },
+        });
+    });
+</script> <link href="/pr-preview/22/pagefind/pagefind-ui.css" rel="stylesheet"> <script src="/pr-preview/22/pagefind/pagefind-ui.js"></script>  </div> <!-- Table of Contents --> <div class="hidden md:block bg-white dark:bg-shineos-900 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-white/5"> <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-4">
+目次
+</h3> <ul class="space-y-2" data-astro-cid-xvrfupwn> <li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#はじめに" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> はじめに </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#llmの幻覚とは" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> LLMの幻覚とは？ </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#幻覚が発生する主な原因" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 幻覚が発生する主な原因 </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#まとめ" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> まとめ </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#幻覚対策の5つの実践的戦略" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 幻覚対策の5つの実践的戦略 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#戦略1-rag検索拡張生成の統合" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 戦略1: RAG（検索拡張生成）の統合 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#実装例python--langchain" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 実装例（Python + LangChain） </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#rag実装のベストプラクティス" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> RAG実装のベストプラクティス </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#戦略2-効果的なプロンプト設計" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 戦略2: 効果的なプロンプト設計 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#幻覚を減らすプロンプトパターン" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 幻覚を減らすプロンプトパターン </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#構造化プロンプトの実装" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 構造化プロンプトの実装 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#戦略3-出力の自動検証" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 戦略3: 出力の自動検証 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#事実検証システムの実装" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 事実検証システムの実装 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#セルフチェックプロンプト" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> セルフチェックプロンプト </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#戦略4-ソース引用の徹底" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 戦略4: ソース引用の徹底 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#ソース付き回答の生成" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> ソース付き回答の生成 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#戦略5-パラメータ調整による制御" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 戦略5: パラメータ調整による制御 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#温度パラメータの最適化" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 温度パラメータの最適化 </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#実務での幻覚対策フレームワーク" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 実務での幻覚対策フレームワーク </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#モニタリングと継続的改善" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> モニタリングと継続的改善 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#幻覚検出メトリクス" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 幻覚検出メトリクス </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#よくある質問" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> よくある質問 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#幻覚を完全に防ぐことはできますか" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 幻覚を完全に防ぐことはできますか？ </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#ragを使えば幻覚は発生しませんか" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> RAGを使えば幻覚は発生しませんか？ </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#温度パラメータを0にすれば安全ですか" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 温度パラメータを0にすれば安全ですか？ </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#どの対策が最も効果的ですか" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> どの対策が最も効果的ですか？ </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#おわりに" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> おわりに </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#参考リンク" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 参考リンク </a> </li> </ul>  </div> <!-- Categories Widget -->  <!-- Tags Widget --> <div class="bg-white dark:bg-shineos-900 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-white/5"> <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-4">
+Tags
+</h3> <div class="flex flex-wrap gap-2"> <a href="/pr-preview/22/tags/LLM" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"> LLM </a><a href="/pr-preview/22/tags/SaaS" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"> SaaS </a><a href="/pr-preview/22/tags/RAG" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"> RAG </a><a href="/pr-preview/22/tags/AI活用" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"> AI活用 </a><a href="/pr-preview/22/tags/プロダクト開発" class="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 text-xs rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"> プロダクト開発 </a> </div> </div> <!-- Related Posts --> <div class="bg-white dark:bg-shineos-900 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-white/5"> <h3 class="text-base font-bold text-gray-900 dark:text-white mb-4 relative inline-block">
+関連記事
+<span class="absolute -bottom-1 left-0 w-full h-0.5 bg-blue-600 rounded-full"></span> </h3> <div class="space-y-4"> <a href="/pr-preview/22/posts/2025-12-16-ai-guardrails-implementation" class="group flex gap-3 items-start bg-gray-50 dark:bg-shineos-800/50 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-shineos-800 transition-colors"> <div class="shrink-0 w-24 aspect-video rounded-md overflow-hidden bg-gray-200 dark:bg-gray-700"> <img src="/pr-preview/22/images/posts/2025/12/ai-guardrails-implementation/header.webp" alt="AI導入で直面する「回答の不確実性」をどう制御するか？Shineos流のガードレール実装" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"> </div> <div class="flex flex-col min-w-0"> <div class="flex items-center gap-2 mb-1"> <span class="text-[10px] items-center px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 font-medium truncate max-w-[80px]"> AI </span> <span class="text-[10px] text-gray-400"> 2025/12/16 </span> </div> <h4 class="text-xs font-bold text-gray-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-cyan-400 transition-colors line-clamp-3 leading-relaxed"> AI導入で直面する「回答の不確実性」をどう制御するか？Shineos流のガードレール実装 </h4> </div> </a><a href="/pr-preview/22/posts/2025-12-14-function-calling-llm-app" class="group flex gap-3 items-start bg-gray-50 dark:bg-shineos-800/50 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-shineos-800 transition-colors"> <div class="shrink-0 w-24 aspect-video rounded-md overflow-hidden bg-gray-200 dark:bg-gray-700"> <img src="/pr-preview/22/images/posts/2025/12/function-calling-llm-app/header.webp" alt="Function Callingを活用したLLMアプリケーション開発 - 外部ツール連携の実践パターン" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"> </div> <div class="flex flex-col min-w-0"> <div class="flex items-center gap-2 mb-1"> <span class="text-[10px] items-center px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 font-medium truncate max-w-[80px]"> LLM </span> <span class="text-[10px] text-gray-400"> 2025/12/14 </span> </div> <h4 class="text-xs font-bold text-gray-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-cyan-400 transition-colors line-clamp-3 leading-relaxed"> Function Callingを活用したLLMアプリケーション開発 - 外部ツール連携の実践パターン </h4> </div> </a><a href="/pr-preview/22/posts/2025-12-13-prompt-engineering-best-practices" class="group flex gap-3 items-start bg-gray-50 dark:bg-shineos-800/50 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-shineos-800 transition-colors"> <div class="shrink-0 w-24 aspect-video rounded-md overflow-hidden bg-gray-200 dark:bg-gray-700"> <img src="/pr-preview/22/images/posts/2025/12/prompt-engineering-best-practices/header.webp" alt="プロンプトエンジニアリングのベストプラクティス - LLMの性能を最大化する技法" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"> </div> <div class="flex flex-col min-w-0"> <div class="flex items-center gap-2 mb-1"> <span class="text-[10px] items-center px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 font-medium truncate max-w-[80px]"> プロンプトエンジニアリング </span> <span class="text-[10px] text-gray-400"> 2025/12/13 </span> </div> <h4 class="text-xs font-bold text-gray-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-cyan-400 transition-colors line-clamp-3 leading-relaxed"> プロンプトエンジニアリングのベストプラクティス - LLMの性能を最大化する技法 </h4> </div> </a><a href="/pr-preview/22/posts/2025-12-08-enterprise-knowledge-search-rag" class="group flex gap-3 items-start bg-gray-50 dark:bg-shineos-800/50 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-shineos-800 transition-colors"> <div class="shrink-0 w-24 aspect-video rounded-md overflow-hidden bg-gray-200 dark:bg-gray-700"> <img src="/pr-preview/22/images/posts/2025/12/enterprise-knowledge-search-rag/header.webp" alt="社内ナレッジが散在する組織における、高精度ドキュメント検索システムの構築ガイド（RAG実践）" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"> </div> <div class="flex flex-col min-w-0"> <div class="flex items-center gap-2 mb-1"> <span class="text-[10px] items-center px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 font-medium truncate max-w-[80px]"> RAG </span> <span class="text-[10px] text-gray-400"> 2025/12/8 </span> </div> <h4 class="text-xs font-bold text-gray-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-cyan-400 transition-colors line-clamp-3 leading-relaxed"> 社内ナレッジが散在する組織における、高精度ドキュメント検索システムの構築ガイド（RAG実践） </h4> </div> </a> </div> </div> </div> </aside> </div>  <div id="mobile-toc-container" class="md:hidden"> <button id="mobile-toc-btn" class="fixed bottom-6 right-6 z-50 w-14 h-14 bg-white dark:bg-shineos-800 rounded-full shadow-lg border border-gray-200 dark:border-white/10 flex items-center justify-center text-gray-700 dark:text-white hover:scale-105 transition-transform"> <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg> </button> <div id="mobile-toc-overlay" class="fixed inset-0 z-40 bg-white/95 dark:bg-shineos-950/95 backdrop-blur-sm transform transition-transform duration-300 translate-y-full flex flex-col pt-20 px-6 pb-6 overflow-y-auto"> <button id="close-toc-btn" class="absolute top-6 right-6 p-2 text-gray-500 hover:text-gray-900 dark:hover:text-white"> <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg> </button> <h2 class="text-xl font-bold mb-6 text-gray-900 dark:text-white">
+目次
+</h2> <ul class="space-y-2" data-astro-cid-xvrfupwn> <li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#はじめに" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> はじめに </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#llmの幻覚とは" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> LLMの幻覚とは？ </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#幻覚が発生する主な原因" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 幻覚が発生する主な原因 </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#まとめ" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> まとめ </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#幻覚対策の5つの実践的戦略" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 幻覚対策の5つの実践的戦略 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#戦略1-rag検索拡張生成の統合" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 戦略1: RAG（検索拡張生成）の統合 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#実装例python--langchain" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 実装例（Python + LangChain） </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#rag実装のベストプラクティス" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> RAG実装のベストプラクティス </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#戦略2-効果的なプロンプト設計" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 戦略2: 効果的なプロンプト設計 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#幻覚を減らすプロンプトパターン" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 幻覚を減らすプロンプトパターン </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#構造化プロンプトの実装" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 構造化プロンプトの実装 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#戦略3-出力の自動検証" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 戦略3: 出力の自動検証 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#事実検証システムの実装" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 事実検証システムの実装 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#セルフチェックプロンプト" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> セルフチェックプロンプト </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#戦略4-ソース引用の徹底" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 戦略4: ソース引用の徹底 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#ソース付き回答の生成" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> ソース付き回答の生成 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#戦略5-パラメータ調整による制御" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 戦略5: パラメータ調整による制御 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#温度パラメータの最適化" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 温度パラメータの最適化 </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#実務での幻覚対策フレームワーク" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 実務での幻覚対策フレームワーク </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#モニタリングと継続的改善" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> モニタリングと継続的改善 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#幻覚検出メトリクス" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 幻覚検出メトリクス </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#よくある質問" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> よくある質問 </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#幻覚を完全に防ぐことはできますか" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 幻覚を完全に防ぐことはできますか？ </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#ragを使えば幻覚は発生しませんか" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> RAGを使えば幻覚は発生しませんか？ </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#温度パラメータを0にすれば安全ですか" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 温度パラメータを0にすれば安全ですか？ </a> </li><li class="toc-item pl-2 ml-4" data-astro-cid-xvrfupwn> <a href="#どの対策が最も効果的ですか" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> どの対策が最も効果的ですか？ </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#おわりに" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> おわりに </a> </li><li class="toc-item pl-2 " data-astro-cid-xvrfupwn> <a href="#参考リンク" class="text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors block py-1 border-l-2 border-transparent hover:border-blue-500 pl-2" data-astro-cid-xvrfupwn> 参考リンク </a> </li> </ul>  </div> </div> <script type="module">function r(){document.querySelectorAll("pre").forEach(t=>{const o=document.createElement("div");o.className="absolute top-2 right-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100 z-10",getComputedStyle(t).position==="static"&&(t.style.position="relative"),t.classList.add("group");const e=document.createElement("button");e.className="w-10 h-10 flex items-center justify-center rounded-md bg-gray-700/80 hover:bg-gray-600 text-white shadow-sm backdrop-blur-sm transition-colors border border-white/10",e.innerHTML=`
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+        </svg>
+      `,e.title="Copy code",e.setAttribute("aria-label","ソースコードをコピー"),e.addEventListener("click",async()=>{const n=t.querySelector("code"),a=n?n.innerText:t.innerText;try{await navigator.clipboard.writeText(a),e.innerHTML=`
+              <svg class="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+            `,setTimeout(()=>{e.innerHTML=`
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                  </svg>
+                `},2e3)}catch(i){console.error("Failed to copy code:",i)}}),o.appendChild(e),t.appendChild(o)})}r();document.addEventListener("astro:page-load",r);</script> <script type="module">const c=document.getElementById("mobile-toc-btn"),l=document.getElementById("close-toc-btn"),t=document.getElementById("mobile-toc-overlay"),n=t?.querySelectorAll("a");function e(){t.classList.toggle("translate-y-full"),document.body.classList.toggle("overflow-hidden")}c?.addEventListener("click",e);l?.addEventListener("click",e);n?.forEach(o=>{o.addEventListener("click",e)});</script>  </main> <footer class="border-t border-gray-200 dark:border-white/5 bg-white dark:bg-shineos-900/50 backdrop-blur-lg mt-20 transition-colors duration-300"> <div class="max-w-5xl mx-auto px-6 py-12 flex flex-col md:flex-row justify-between items-center gap-6"> <div class="text-center md:text-left"> <div class="text-xl font-bold text-gray-900 dark:text-white mb-2">
+Shineos Inc.
+</div> <p class="text-gray-500 dark:text-gray-500 text-sm">
+開発チームによる技術ブログ。<br> モダンなWeb開発、AIエージェント、DXの実践知見を共有します。
+</p> </div> <div class="flex items-center space-x-6 text-sm"> <a href="https://x.com/shineos_corp" target="_blank" class="text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-white transition-colors">X (Twitter)</a> <a href="https://github.com/Shineos" target="_blank" class="text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-white transition-colors">GitHub</a> <a href="/pr-preview/22/privacy" class="text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-white transition-colors">Privacy Policy</a> </div> </div> <div class="border-t border-gray-100 dark:border-white/5 py-6 text-center text-gray-400 dark:text-gray-600 text-xs">
+&copy; 2025 Shineos Inc. All rights reserved.
+</div> </footer> </body></html> 
